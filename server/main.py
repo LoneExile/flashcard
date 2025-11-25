@@ -1,11 +1,13 @@
 """
-Edge-TTS API Server for Flashcard App
+Flashcard App Backend Server
 
-This FastAPI server provides text-to-speech functionality using Microsoft Edge TTS.
-It generates high-quality audio for Chinese and English text.
+Features:
+- Text-to-Speech using Microsoft Edge TTS
+- SQLite database for persistent storage
+- REST API for decks, cards, and study data
 
 Requirements:
-    pip install fastapi uvicorn edge-tts
+    pip install fastapi uvicorn edge-tts sqlalchemy
 
 Usage:
     uvicorn main:app --host 0.0.0.0 --port 8000 --reload
@@ -22,15 +24,24 @@ from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from database import init_db
+from api import router as api_router
+
 # Cache directory for generated audio
 CACHE_DIR = Path(tempfile.gettempdir()) / "edge_tts_cache"
 CACHE_DIR.mkdir(exist_ok=True)
 
+# Initialize database
+init_db()
+
 app = FastAPI(
-    title="Edge-TTS API",
-    description="Text-to-Speech API for Flashcard App using Microsoft Edge TTS",
+    title="Flashcard App API",
+    description="Backend API for Flashcard App with TTS and SQLite storage",
     version="1.0.0"
 )
+
+# Include API routes
+app.include_router(api_router)
 
 # Enable CORS for frontend access
 app.add_middleware(

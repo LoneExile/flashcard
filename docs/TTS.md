@@ -1,54 +1,72 @@
 # Text-to-Speech (TTS) Integration
 
-The Flashcard App supports audio playback for cards using IndexTTS, a high-quality Chinese text-to-speech system.
+The Flashcard App supports high-quality audio playback for Chinese cards using Microsoft Edge TTS neural voices.
 
 ## Architecture
 
 ```
 ┌─────────────────┐     HTTP/REST      ┌──────────────────┐
-│  React Frontend │ ◄────────────────► │  IndexTTS Server │
-│   (Browser)     │   /tts?text=...    │    (Python)      │
+│  React Frontend │ ◄────────────────► │  Edge-TTS Server │
+│   (Browser)     │   /tts?text=...    │    (FastAPI)     │
 └─────────────────┘                    └──────────────────┘
         │                                      │
         │ Fallback                             │
         ▼                                      ▼
 ┌─────────────────┐                    ┌──────────────────┐
-│ Web Speech API  │                    │  GPU (CUDA)      │
-│   (Browser)     │                    │  + Model Files   │
+│ Web Speech API  │                    │  Microsoft Edge  │
+│   (Browser)     │                    │  Neural Voices   │
 └─────────────────┘                    └──────────────────┘
 ```
 
 ## Features
 
-- **IndexTTS Integration**: High-quality Chinese/Pinyin TTS
+- **Edge-TTS Integration**: High-quality Microsoft Edge neural voices for Chinese
+- **Multiple Voice Options**: 6+ Chinese voices with different styles
 - **Automatic Fallback**: Uses browser Web Speech API if server unavailable
 - **Audio Caching**: Server caches generated audio for faster playback
 - **Audio Field Support**: Cards can have an optional `audio` field with Chinese characters for correct pronunciation when `front` contains Pinyin
+- **Language Detection**: Chinese uses Edge-TTS, English uses Web Speech API
 - **Keyboard Shortcuts**:
   - `S` - Speak question (uses `audio` field if available, otherwise `front`)
-  - `A` - Speak answer (back)
+  - `A` - Speak answer (back, uses English voice)
+
+## Available Voices
+
+| Key | Voice ID | Gender | Style |
+|-----|----------|--------|-------|
+| xiaoxiao | zh-CN-XiaoxiaoNeural | Female | Warm and cheerful (default) |
+| xiaoyi | zh-CN-XiaoyiNeural | Female | Lively |
+| yunjian | zh-CN-YunjianNeural | Male | Professional |
+| yunxi | zh-CN-YunxiNeural | Male | Cheerful |
+| yunxia | zh-CN-YunxiaNeural | Male | Calm |
+| yunyang | zh-CN-YunyangNeural | Male | News style |
+| liaoning | zh-CN-liaoning-XiaobeiNeural | Female | Liaoning dialect |
+| shaanxi | zh-CN-shaanxi-XiaoniNeural | Female | Shaanxi dialect |
 
 ## Setup
 
-### 1. IndexTTS Server Setup
+### 1. Install Dependencies
 
-See `server/README.md` for detailed instructions.
-
-Quick start:
 ```bash
-# Install IndexTTS (from their repo)
-git clone https://github.com/index-tts/index-tts.git
-cd index-tts
-uv sync --all-extras
-
-# Download models
-huggingface-cli download IndexTeam/IndexTTS-2 --local-dir=checkpoints
-
-# Start server
-uvicorn flashcard-app/server/main:app --host 0.0.0.0 --port 8000
+cd server
+pip install -r requirements.txt
+# Or individually:
+pip install fastapi uvicorn edge-tts sqlalchemy
 ```
 
-### 2. Frontend Configuration
+### 2. Start Server
+
+```bash
+cd server
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+The server will:
+- Start on `http://localhost:8000`
+- Initialize SQLite database (`flashcards.db`)
+- Cache generated audio in temp directory
+
+### 3. Frontend Configuration
 
 By default, the frontend connects to `http://localhost:8000`.
 
@@ -56,22 +74,22 @@ To change the server URL, set the environment variable:
 
 ```bash
 # .env.local
-VITE_TTS_SERVER_URL=http://your-server:8000
-```
-
-Or edit `src/lib/tts.ts`:
-
-```typescript
-const TTS_SERVER_URL = 'http://your-server:8000'
+VITE_API_URL=http://your-server:8000
 ```
 
 ## Usage
 
+### Voice Selection
+
+1. Go to **Settings** > **Voice Settings**
+2. Select a Chinese voice from the dropdown
+3. The selected voice is saved to localStorage
+
 ### In Study Mode
 
 1. Click the speaker icon next to the question to hear pronunciation
-2. Press `S` key to speak the question
-3. When answer is shown, press `A` to speak the answer
+2. Press `S` key to speak the question (Chinese)
+3. When answer is shown, press `A` to speak the answer (English)
 4. Click speaker icon next to answer text
 
 ### In Card List
@@ -91,7 +109,7 @@ const TTS_SERVER_URL = 'http://your-server:8000'
 import { useTTS } from '@/hooks/useTTS'
 
 const {
-  speak,           // (text: string) => Promise<void>
+  speak,           // (text: string, options?: { lang?: string }) => Promise<void>
   stop,            // () => void
   isPlaying,       // boolean
   isLoading,       // boolean
@@ -99,12 +117,16 @@ const {
   preload,         // (texts: string[]) => Promise<void>
   refreshServerStatus, // () => Promise<boolean>
 } = useTTS()
+
+// Example usage
+speak('你好世界')                    // Chinese (uses Edge-TTS)
+speak('Hello world', { lang: 'en-US' })  // English (uses Web Speech API)
 ```
 
 ### TTS Service Functions
 
 ```typescript
-import { speak, stopSpeaking, checkServerStatus } from '@/lib/tts'
+import { speak, stopSpeaking, checkServerStatus, setVoice, getVoice, CHINESE_VOICES } from '@/lib/tts'
 
 // Speak text (auto-selects best available method)
 await speak('你好世界')
@@ -112,6 +134,12 @@ await speak('你好世界')
 // Force specific method
 await speak('Hello', { forceWebSpeech: true })
 await speak('你好', { forceServer: true })
+
+// Change voice
+setVoice('yunxi')  // Changes to male cheerful voice
+
+// Get current voice
+const currentVoice = getVoice()  // Returns 'xiaoxiao' by default
 
 // Stop all audio
 stopSpeaking()
@@ -124,34 +152,37 @@ const isAvailable = await checkServerStatus()
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/` | GET | Health check |
-| `/health` | GET | Detailed status |
-| `/tts` | GET/POST | Generate speech |
-| `/tts?text=...` | GET | Generate speech (URL param) |
-| `/voices` | GET | List available voices |
+| `/` | GET | Service info |
+| `/health` | GET | Detailed health status |
+| `/tts` | GET/POST | Generate speech audio |
+| `/voices` | GET | List Chinese voices |
+| `/voices/all` | GET | List all Edge-TTS voices |
 | `/cache` | DELETE | Clear audio cache |
 
-Example:
-```bash
-# Generate audio
-curl "http://localhost:8000/tts?text=你好" --output hello.wav
+#### TTS Endpoint Parameters
 
-# POST with JSON
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| text | string | required | Text to synthesize |
+| voice | string | xiaoxiao | Voice key or full voice ID |
+| rate | string | +0% | Speech rate (-50% to +100%) |
+| pitch | string | +0Hz | Pitch adjustment |
+
+Example requests:
+
+```bash
+# GET request
+curl "http://localhost:8000/tts?text=你好&voice=yunxi" --output hello.mp3
+
+# POST request with JSON
 curl -X POST "http://localhost:8000/tts" \
   -H "Content-Type: application/json" \
-  -d '{"text": "你好世界"}' \
-  --output output.wav
+  -d '{"text": "你好世界", "voice": "xiaoxiao", "rate": "+10%"}' \
+  --output output.mp3
+
+# List available voices
+curl http://localhost:8000/voices
 ```
-
-## Pinyin Support
-
-IndexTTS supports mixed Chinese characters and Pinyin for precise pronunciation:
-
-```
-之前你做DE5很好，所以这一次也DEI3做DE2很好才XING2
-```
-
-The numbers after Pinyin indicate tones (1-5).
 
 ## Troubleshooting
 
@@ -160,44 +191,48 @@ The numbers after Pinyin indicate tones (1-5).
 1. Check if server is running: `curl http://localhost:8000/health`
 2. Verify CORS is enabled (check browser console)
 3. Check firewall/network settings
+4. Ensure `edge-tts` is installed: `pip show edge-tts`
 
-### Poor Audio Quality
+### No Audio Playing
+
+1. Check browser console for errors
+2. Verify server status in Settings (green = online)
+3. Try refreshing server status with the refresh button
+4. Check if audio is muted in browser
+
+### Poor Audio Quality (Fallback Mode)
 
 - Browser Web Speech API has limited Chinese voices
-- Ensure IndexTTS server is running for best quality
-- Try different voice samples in IndexTTS
+- Ensure Edge-TTS server is running for best quality
+- Check server logs for TTS generation errors
 
-### GPU Out of Memory
+### Voice Not Changing
 
-- Enable FP16 mode in server config
-- Use smaller batch sizes
-- Consider CPU inference (slower but works)
-
-### Audio Delays
-
-- First request loads the model (can take 5-10s)
-- Subsequent requests are cached
-- Use `preload()` to pre-cache common phrases
+1. Clear browser cache
+2. Check localStorage for `tts-voice` key
+3. Refresh the page after changing voice
 
 ## Performance
 
 | Method | Quality | Latency | Requirements |
 |--------|---------|---------|--------------|
-| IndexTTS (GPU) | Excellent | ~1-2s | CUDA GPU, ~4GB VRAM |
-| IndexTTS (CPU) | Excellent | ~10-30s | 16GB+ RAM |
+| Edge-TTS Server | Excellent | ~500ms-2s | Python, Internet |
 | Web Speech API | Basic | Instant | Browser only |
+
+Edge-TTS requires internet connection to Microsoft's servers but provides high-quality neural voices without GPU requirements.
 
 ## Files
 
 ```
 server/
-├── main.py           # FastAPI server
-├── requirements.txt  # Python dependencies
-└── README.md         # Server setup guide
+├── main.py           # FastAPI server with TTS endpoints
+├── database.py       # SQLAlchemy models
+├── api.py            # REST API endpoints
+└── requirements.txt  # Python dependencies
 
 src/
 ├── lib/
-│   └── tts.ts        # TTS service
+│   └── tts.ts        # TTS service with voice selection
 └── hooks/
-    └── useTTS.ts     # React hook
+    └── useTTS.ts     # React hook for TTS
 ```

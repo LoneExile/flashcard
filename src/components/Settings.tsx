@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Moon, Sun, Monitor, Trash2, Download, Upload, Volume2 } from 'lucide-react'
+import { Moon, Sun, Monitor, Trash2, Download, Upload, Volume2, Cloud, CloudUpload, CloudDownload, RefreshCw } from 'lucide-react'
 import { CHINESE_VOICES, getVoice, setVoice, type VoiceKey } from '@/lib/tts'
+import { checkServerStatus, syncToServer, syncFromServer, getApiUrl } from '@/lib/api'
 import {
   Card,
   CardContent,
@@ -42,12 +43,20 @@ export function Settings() {
   const [dailyGoal, setDailyGoal] = useState(20)
   const [exportLoading, setExportLoading] = useState(false)
   const [selectedVoice, setSelectedVoice] = useState<VoiceKey>(getVoice())
+  const [serverOnline, setServerOnline] = useState<boolean | null>(null)
+  const [syncing, setSyncing] = useState(false)
+  const [syncMessage, setSyncMessage] = useState<string | null>(null)
 
   useEffect(() => {
     if (settings) {
       setDailyGoal(settings.dailyGoal)
     }
   }, [settings])
+
+  // Check server status on mount
+  useEffect(() => {
+    checkServerStatus().then(setServerOnline)
+  }, [])
 
   const updateTheme = async (theme: 'light' | 'dark' | 'system') => {
     await db.settings.update('app-settings', { theme })
@@ -178,6 +187,72 @@ export function Settings() {
     alert('All data has been cleared.')
   }
 
+  const handleCheckServer = async () => {
+    const status = await checkServerStatus()
+    setServerOnline(status)
+    setSyncMessage(status ? 'Server is online' : 'Server is offline')
+    setTimeout(() => setSyncMessage(null), 3000)
+  }
+
+  const handleSyncToServer = async () => {
+    setSyncing(true)
+    setSyncMessage(null)
+    try {
+      const [decks, cards, reviewLogs, studySessions] = await Promise.all([
+        db.decks.toArray(),
+        db.cards.toArray(),
+        db.reviewLogs.toArray(),
+        db.studySessions.toArray(),
+      ])
+
+      const result = await syncToServer({ decks, cards, reviewLogs, studySessions })
+      setSyncMessage(result.message)
+      if (!result.success) {
+        setServerOnline(false)
+      }
+    } finally {
+      setSyncing(false)
+      setTimeout(() => setSyncMessage(null), 5000)
+    }
+  }
+
+  const handleSyncFromServer = async () => {
+    setSyncing(true)
+    setSyncMessage(null)
+    try {
+      const result = await syncFromServer()
+
+      if (result.success && result.data) {
+        // Clear local data and import from server
+        await clearAllData()
+
+        // Import decks
+        await db.decks.bulkAdd(result.data.decks)
+
+        // Import cards
+        await db.cards.bulkAdd(result.data.cards)
+
+        // Import review logs
+        if (result.data.reviewLogs.length > 0) {
+          await db.reviewLogs.bulkAdd(result.data.reviewLogs)
+        }
+
+        // Import study sessions
+        if (result.data.studySessions.length > 0) {
+          await db.studySessions.bulkAdd(result.data.studySessions)
+        }
+
+        setSyncMessage(result.message)
+      } else {
+        setSyncMessage(result.message)
+        setServerOnline(false)
+      }
+    } finally {
+      setSyncing(false)
+      setTimeout(() => setSyncMessage(null), 5000)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold">Settings</h2>
@@ -285,6 +360,67 @@ export function Settings() {
               Uses Microsoft Edge neural voices for natural-sounding Chinese speech
             </p>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Backend Sync */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Cloud className="h-5 w-5" />
+            Backend Sync
+          </CardTitle>
+          <CardDescription>
+            Sync your data with the SQLite backend server
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-2 text-sm">
+            <span>Server:</span>
+            <code className="bg-muted px-2 py-1 rounded text-xs">{getApiUrl()}</code>
+            <span
+              className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs ${
+                serverOnline === null
+                  ? 'bg-gray-100 text-gray-600'
+                  : serverOnline
+                    ? 'bg-green-100 text-green-700'
+                    : 'bg-red-100 text-red-700'
+              }`}
+            >
+              {serverOnline === null ? 'Unknown' : serverOnline ? 'Online' : 'Offline'}
+            </span>
+            <Button variant="ghost" size="sm" onClick={handleCheckServer} disabled={syncing}>
+              <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+            </Button>
+          </div>
+
+          <div className="flex flex-wrap gap-4">
+            <Button
+              variant="outline"
+              onClick={handleSyncToServer}
+              disabled={syncing || serverOnline === false}
+            >
+              <CloudUpload className="mr-2 h-4 w-4" />
+              {syncing ? 'Syncing...' : 'Upload to Server'}
+            </Button>
+
+            <Button
+              variant="outline"
+              onClick={handleSyncFromServer}
+              disabled={syncing || serverOnline === false}
+            >
+              <CloudDownload className="mr-2 h-4 w-4" />
+              {syncing ? 'Syncing...' : 'Download from Server'}
+            </Button>
+          </div>
+
+          {syncMessage && (
+            <p className="text-sm text-muted-foreground">{syncMessage}</p>
+          )}
+
+          <p className="text-xs text-muted-foreground">
+            Upload saves your local data to the server. Download replaces local data with server data.
+          </p>
         </CardContent>
       </Card>
 

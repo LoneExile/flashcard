@@ -6,6 +6,8 @@ A production-ready flashcard application built with modern web technologies, fea
 
 ## Tech Stack
 
+### Frontend
+
 | Technology | Version | Purpose |
 |------------|---------|---------|
 | React | 19.x | UI framework |
@@ -19,12 +21,28 @@ A production-ready flashcard application built with modern web technologies, fea
 | uuid | 11.x | Unique ID generation |
 | Lucide React | latest | Icons |
 
+### Backend (Optional)
+
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| Python | 3.10+ | Runtime |
+| FastAPI | 0.109+ | REST API framework |
+| SQLAlchemy | 2.0+ | ORM for SQLite |
+| edge-tts | 6.1+ | Microsoft Edge neural TTS |
+| uvicorn | 0.27+ | ASGI server |
+
 ## Project Structure
 
 ```
 flashcard-app/
 ├── docs/                    # Documentation
 ├── dist/                    # Production build output
+├── server/                  # Python backend
+│   ├── main.py              # FastAPI server (TTS + API)
+│   ├── database.py          # SQLAlchemy models
+│   ├── api.py               # REST API endpoints
+│   ├── requirements.txt     # Python dependencies
+│   └── flashcards.db        # SQLite database (created on run)
 ├── src/
 │   ├── components/
 │   │   ├── ui/              # shadcn/ui base components
@@ -56,10 +74,13 @@ flashcard-app/
 │   ├── hooks/
 │   │   ├── useCards.ts      # Card CRUD operations
 │   │   ├── useDecks.ts      # Deck CRUD operations
-│   │   └── useStudySession.ts # Study session management
+│   │   ├── useStudySession.ts # Study session management
+│   │   └── useTTS.ts        # Text-to-speech hook
 │   ├── lib/
+│   │   ├── api.ts           # Backend API client
 │   │   ├── fsrs.ts          # FSRS algorithm wrapper
 │   │   ├── seedData.ts      # Sample Mandarin flashcards
+│   │   ├── tts.ts           # TTS service
 │   │   └── utils.ts         # Utility functions
 │   ├── types/
 │   │   └── index.ts         # TypeScript interfaces
@@ -208,11 +229,28 @@ const defaultParams: Partial<FSRSParameters> = {
 ### 6. Settings
 - Theme toggle (Light/Dark/System)
 - Daily goal configuration
-- Data export
+- Voice selection (6+ Chinese neural voices)
+- Backend sync (upload/download to SQLite server)
+- Data export (JSON)
 - Data import (full restore)
 - Clear all data (with confirmation)
 
-### 7. Sample Data
+### 7. Text-to-Speech
+- Chinese TTS using Microsoft Edge neural voices
+- Voice selection in Settings (xiaoxiao, yunxi, etc.)
+- Keyboard shortcuts: `S` for question, `A` for answer
+- Automatic language detection (Chinese/English)
+- Server-side audio caching
+- Fallback to browser Web Speech API
+
+### 8. Backend Sync
+- SQLite server for persistent storage
+- Upload local data to server
+- Download server data to local
+- Server status indicator in Settings
+- API for decks, cards, review logs, study sessions
+
+### 9. Sample Data
 - Mandarin Chinese flashcards from qa-files
 - "Load Sample Data" button for quick onboarding
 
@@ -265,15 +303,103 @@ npm run preview  # Preview production build
 
 ## Text-to-Speech (TTS)
 
-The app integrates with IndexTTS for high-quality Chinese/Pinyin audio:
+The app integrates with Microsoft Edge TTS for high-quality Chinese neural voices:
 
-- **IndexTTS Server**: Python FastAPI backend using IndexTTS model
+- **Edge-TTS Server**: Python FastAPI backend using `edge-tts` library
+- **Multiple Voices**: 6+ Chinese voices (male/female, different styles)
+- **Voice Selection**: Configurable in Settings > Voice Settings
 - **Audio Playback**: Speaker buttons in study view and card list
-- **Keyboard Shortcuts**: `S` to speak question, `A` to speak answer
+- **Keyboard Shortcuts**: `S` to speak question (Chinese), `A` to speak answer (English)
+- **Language Support**: Chinese uses Edge-TTS, English uses Web Speech API
 - **Fallback**: Browser Web Speech API when server unavailable
 - **Caching**: Server-side audio caching for faster playback
 
 See `docs/TTS.md` for setup and configuration.
+
+## SQLite Backend
+
+The app includes an optional SQLite backend for persistent server-side storage:
+
+### Backend Stack
+
+| Technology | Purpose |
+|------------|---------|
+| FastAPI | REST API framework |
+| SQLAlchemy | ORM for SQLite |
+| edge-tts | Microsoft Edge neural TTS |
+
+### Database Schema (SQLite)
+
+**decks**
+- `id` (TEXT, PRIMARY KEY)
+- `name` (TEXT, NOT NULL)
+- `description` (TEXT)
+- `parent_id` (TEXT, FOREIGN KEY)
+- `created_at` (DATETIME)
+- `updated_at` (DATETIME)
+- `settings` (JSON)
+
+**cards**
+- `id` (TEXT, PRIMARY KEY)
+- `deck_id` (TEXT, FOREIGN KEY)
+- `type` (TEXT) - basic, cloze, reversible
+- `front` (TEXT)
+- `back` (TEXT)
+- `audio` (TEXT) - Chinese characters for TTS
+- `tags` (JSON)
+- `media_urls` (JSON)
+- `fsrs_*` (FSRS algorithm fields)
+- `created_at`, `updated_at` (DATETIME)
+
+**review_logs**
+- `id` (TEXT, PRIMARY KEY)
+- `card_id` (TEXT, FOREIGN KEY)
+- `rating`, `state`, `stability`, `difficulty` (FSRS data)
+- `review` (DATETIME)
+
+**study_sessions**
+- `id` (TEXT, PRIMARY KEY)
+- `deck_id` (TEXT, FOREIGN KEY)
+- `start_time`, `end_time` (DATETIME)
+- `cards_studied`, rating counts
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/decks` | GET, POST | List/create decks |
+| `/api/decks/{id}` | GET, PUT, DELETE | CRUD deck |
+| `/api/cards` | GET, POST | List/create cards |
+| `/api/cards/{id}` | GET, PUT, DELETE | CRUD card |
+| `/api/sync` | GET | Download all data |
+| `/api/sync` | POST | Upload all data (replaces existing) |
+| `/api/stats/deck/{id}` | GET | Deck statistics |
+
+### Sync Flow
+
+```
+┌─────────────────┐                    ┌──────────────────┐
+│  Browser        │                    │  Server          │
+│  (IndexedDB)    │                    │  (SQLite)        │
+└────────┬────────┘                    └────────┬─────────┘
+         │                                      │
+         │  Upload to Server (POST /api/sync)   │
+         │─────────────────────────────────────►│
+         │                                      │
+         │  Download from Server (GET /api/sync)│
+         │◄─────────────────────────────────────│
+         │                                      │
+```
+
+### Running the Backend
+
+```bash
+cd server
+pip install -r requirements.txt
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+The database file `flashcards.db` is created automatically in the `server/` directory.
 
 ## Future Enhancements
 Potential features for future development:
