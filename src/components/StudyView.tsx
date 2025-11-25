@@ -1,5 +1,5 @@
-import { useEffect, useCallback, useMemo } from 'react'
-import { ArrowLeft, RotateCcw, X, Eye, Volume2, VolumeX, Loader2 } from 'lucide-react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { ArrowLeft, RotateCcw, X, Eye, Volume2, VolumeX, Loader2, ArrowLeftRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -22,6 +22,19 @@ interface StudyViewProps {
 }
 
 export function StudyView({ deck, onBack, onComplete }: StudyViewProps) {
+  // Reverse mode: show answer first, recall the question (Pinyin/Chinese)
+  const [reverseMode, setReverseMode] = useState(() => {
+    return localStorage.getItem('study-reverse-mode') === 'true'
+  })
+
+  const toggleReverseMode = useCallback(() => {
+    setReverseMode(prev => {
+      const newValue = !prev
+      localStorage.setItem('study-reverse-mode', String(newValue))
+      return newValue
+    })
+  }, [])
+
   const {
     isStudying,
     currentCard,
@@ -52,42 +65,75 @@ export function StudyView({ deck, onBack, onComplete }: StudyViewProps) {
     return null
   }, [currentCard, showingAnswer, getSchedulingInfo])
 
+  // In reverse mode, swap question and answer
+  const questionText = useMemo(() => {
+    if (!currentCard) return ''
+    return reverseMode ? currentCard.back : currentCard.front
+  }, [currentCard, reverseMode])
+
+  const answerText = useMemo(() => {
+    if (!currentCard) return ''
+    return reverseMode ? currentCard.front : currentCard.back
+  }, [currentCard, reverseMode])
+
+  // Audio text for question (Chinese characters if available)
+  const questionAudioText = useMemo(() => {
+    if (!currentCard) return ''
+    // In normal mode: use audio field or front
+    // In reverse mode: use back (English)
+    return reverseMode ? currentCard.back : (currentCard.audio || currentCard.front)
+  }, [currentCard, reverseMode])
+
+  // Language for TTS
+  const questionLang = reverseMode ? 'en-US' : undefined  // undefined = Chinese (default)
+  const answerLang = reverseMode ? undefined : 'en-US'
+
   useEffect(() => {
     if (!isStudying && dueCount > 0) {
       startSession()
     }
   }, [isStudying, dueCount, startSession])
 
-  // Play audio for front text (use audio field if available, otherwise front)
-  const playFrontAudio = useCallback(() => {
+  // Play audio for question (respects reverse mode)
+  const playQuestionAudio = useCallback(() => {
     if (currentCard) {
-      // Use audio field (Chinese characters) if available, otherwise fall back to front (Pinyin)
-      speak(currentCard.audio || currentCard.front)
+      speak(questionAudioText, questionLang ? { lang: questionLang } : undefined)
     }
-  }, [currentCard, speak])
+  }, [currentCard, questionAudioText, questionLang, speak])
 
-  // Play audio for back text (answer) - use English language
-  const playBackAudio = useCallback(() => {
+  // Play audio for answer (respects reverse mode)
+  const playAnswerAudio = useCallback(() => {
     if (currentCard) {
-      speak(currentCard.back, { lang: 'en-US' })
+      // In reverse mode, answer is front (Pinyin/Chinese) - use audio field if available
+      const audioText = reverseMode
+        ? (currentCard.audio || currentCard.front)
+        : currentCard.back
+      speak(audioText, answerLang ? { lang: answerLang } : undefined)
     }
-  }, [currentCard, speak])
+  }, [currentCard, reverseMode, answerLang, speak])
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (!isStudying) return
 
-      // 'S' key to speak front text
+      // 'S' key to speak question
       if (e.key === 's' || e.key === 'S') {
         e.preventDefault()
-        playFrontAudio()
+        playQuestionAudio()
         return
       }
 
-      // 'A' key to speak back text (when showing answer)
+      // 'A' key to speak answer (when showing answer)
       if ((e.key === 'a' || e.key === 'A') && showingAnswer) {
         e.preventDefault()
-        playBackAudio()
+        playAnswerAudio()
+        return
+      }
+
+      // 'R' key to toggle reverse mode
+      if (e.key === 'r' || e.key === 'R') {
+        e.preventDefault()
+        toggleReverseMode()
         return
       }
 
@@ -113,7 +159,7 @@ export function StudyView({ deck, onBack, onComplete }: StudyViewProps) {
         }
       }
     },
-    [isStudying, showingAnswer, showAnswer, answerCard, playFrontAudio, playBackAudio]
+    [isStudying, showingAnswer, showAnswer, answerCard, playQuestionAudio, playAnswerAudio, toggleReverseMode]
   )
 
   useEffect(() => {
@@ -230,6 +276,15 @@ export function StudyView({ deck, onBack, onComplete }: StudyViewProps) {
           End Session
         </Button>
         <div className="flex items-center gap-4">
+          <Button
+            variant={reverseMode ? "default" : "outline"}
+            size="sm"
+            onClick={toggleReverseMode}
+            title="Toggle reverse mode (R)"
+          >
+            <ArrowLeftRight className="mr-2 h-4 w-4" />
+            {reverseMode ? 'EN → 中' : '中 → EN'}
+          </Button>
           <span className="text-sm text-muted-foreground">
             {currentIndex + 1} / {totalCards}
           </span>
@@ -274,13 +329,13 @@ export function StudyView({ deck, onBack, onComplete }: StudyViewProps) {
             <div className="text-center mb-8">
               <div className="flex items-center justify-center gap-2 mb-2">
                 <p className="text-xl font-medium whitespace-pre-wrap">
-                  {currentCard.front}
+                  {questionText}
                 </p>
                 <Button
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8 flex-shrink-0"
-                  onClick={playFrontAudio}
+                  onClick={playQuestionAudio}
                   disabled={isTTSLoading}
                   title="Play audio (S)"
                 >
@@ -307,13 +362,13 @@ export function StudyView({ deck, onBack, onComplete }: StudyViewProps) {
                 <div className="text-center">
                   <div className="flex items-center justify-center gap-2">
                     <p className="text-lg whitespace-pre-wrap text-muted-foreground">
-                      {currentCard.back}
+                      {answerText}
                     </p>
                     <Button
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 flex-shrink-0"
-                      onClick={playBackAudio}
+                      onClick={playAnswerAudio}
                       disabled={isTTSLoading}
                       title="Play answer audio (A)"
                     >
@@ -389,7 +444,7 @@ export function StudyView({ deck, onBack, onComplete }: StudyViewProps) {
 
       {/* Keyboard shortcuts hint */}
       <p className="text-center text-xs text-muted-foreground">
-        Keyboard: Space/Enter = show answer, 1-4 = rate, S = speak question, A = speak answer
+        Keyboard: Space/Enter = show, 1-4 = rate, S = speak question, A = speak answer, R = reverse mode
       </p>
     </div>
   )
