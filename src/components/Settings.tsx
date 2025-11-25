@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Moon, Sun, Monitor, Trash2, Download, Upload } from 'lucide-react'
+import { Moon, Sun, Monitor, Trash2, Download, Upload, Volume2 } from 'lucide-react'
+import { CHINESE_VOICES, getVoice, setVoice, type VoiceKey } from '@/lib/tts'
 import {
   Card,
   CardContent,
@@ -40,6 +41,7 @@ export function Settings() {
 
   const [dailyGoal, setDailyGoal] = useState(20)
   const [exportLoading, setExportLoading] = useState(false)
+  const [selectedVoice, setSelectedVoice] = useState<VoiceKey>(getVoice())
 
   useEffect(() => {
     if (settings) {
@@ -67,6 +69,11 @@ export function Settings() {
   const updateDailyGoal = async (goal: number) => {
     setDailyGoal(goal)
     await db.settings.update('app-settings', { dailyGoal: goal })
+  }
+
+  const handleVoiceChange = (voice: VoiceKey) => {
+    setSelectedVoice(voice)
+    setVoice(voice)
   }
 
   const handleExport = async () => {
@@ -239,6 +246,43 @@ export function Settings() {
             />
             <p className="text-xs text-muted-foreground">
               Number of cards you aim to study each day
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Voice Settings */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Voice Settings</CardTitle>
+          <CardDescription>Choose a Chinese voice for text-to-speech</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>Chinese Voice</Label>
+            <Select
+              value={selectedVoice}
+              onValueChange={(value) => handleVoiceChange(value as VoiceKey)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select voice" />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(CHINESE_VOICES) as VoiceKey[]).map((key) => (
+                  <SelectItem key={key} value={key}>
+                    <div className="flex items-center gap-2">
+                      <Volume2 className="h-4 w-4" />
+                      <span>{CHINESE_VOICES[key].name}</span>
+                      <span className="text-muted-foreground">
+                        ({CHINESE_VOICES[key].gender} - {CHINESE_VOICES[key].desc})
+                      </span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Uses Microsoft Edge neural voices for natural-sounding Chinese speech
             </p>
           </div>
         </CardContent>

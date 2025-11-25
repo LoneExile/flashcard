@@ -1,13 +1,8 @@
-# IndexTTS API Server Dependencies
+# Edge-TTS API Server Dependencies
 
 # Web framework
 fastapi>=0.109.0
 uvicorn[standard]>=0.27.0
-python-multipart>=0.0.6
 
-# IndexTTS - install separately from their repo:
-# pip install git+https://github.com/index-tts/index-tts.git
-# Or follow their installation guide
-
-# Optional: for development
-# httpx  # for testing
+# Text-to-Speech
+edge-tts>=6.1.0

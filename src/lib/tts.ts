@@ -10,6 +10,31 @@ const TTS_SERVER_URL = import.meta.env.VITE_TTS_SERVER_URL || 'http://localhost:
 const USE_CACHE = true
 const FALLBACK_TO_WEB_SPEECH = true
 
+// Available Chinese voices
+export const CHINESE_VOICES = {
+  xiaoxiao: { id: 'zh-CN-XiaoxiaoNeural', name: 'Xiaoxiao', gender: 'Female', desc: 'Warm and cheerful' },
+  xiaoyi: { id: 'zh-CN-XiaoyiNeural', name: 'Xiaoyi', gender: 'Female', desc: 'Lively' },
+  yunjian: { id: 'zh-CN-YunjianNeural', name: 'Yunjian', gender: 'Male', desc: 'Professional' },
+  yunxi: { id: 'zh-CN-YunxiNeural', name: 'Yunxi', gender: 'Male', desc: 'Cheerful' },
+  yunxia: { id: 'zh-CN-YunxiaNeural', name: 'Yunxia', gender: 'Male', desc: 'Calm' },
+  yunyang: { id: 'zh-CN-YunyangNeural', name: 'Yunyang', gender: 'Male', desc: 'News style' },
+} as const
+
+export type VoiceKey = keyof typeof CHINESE_VOICES
+
+// Current voice setting (stored in localStorage)
+let currentVoice: VoiceKey = (localStorage.getItem('tts-voice') as VoiceKey) || 'xiaoxiao'
+
+export function setVoice(voice: VoiceKey): void {
+  currentVoice = voice
+  localStorage.setItem('tts-voice', voice)
+  clearAudioCache() // Clear cache when voice changes
+}
+
+export function getVoice(): VoiceKey {
+  return currentVoice
+}
+
 // Audio cache for played audio
 const audioCache = new Map<string, HTMLAudioElement>()
 
@@ -48,18 +73,19 @@ export async function checkServerStatus(): Promise<boolean> {
 }
 
 /**
- * Generate audio URL for text using IndexTTS server
+ * Generate audio URL for text using Edge-TTS server
  */
 function getServerAudioUrl(text: string): string {
-  const params = new URLSearchParams({ text })
+  const voice = CHINESE_VOICES[currentVoice].id
+  const params = new URLSearchParams({ text, voice })
   return `${TTS_SERVER_URL}/tts?${params.toString()}`
 }
 
 /**
- * Play audio using IndexTTS server
+ * Play audio using Edge-TTS server
  */
 async function playWithServer(text: string): Promise<HTMLAudioElement> {
-  const cacheKey = `server:${text}`
+  const cacheKey = `server:${currentVoice}:${text}`
 
   // Check cache
   if (USE_CACHE && audioCache.has(cacheKey)) {
