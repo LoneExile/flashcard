@@ -25,6 +25,7 @@ export interface Card {
   type: CardType
   front: string
   back: string
+  audio?: string // Chinese characters or text for TTS (if different from front)
   tags: string[]
   createdAt: Date
   updatedAt: Date

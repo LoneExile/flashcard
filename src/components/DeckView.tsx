@@ -8,6 +8,7 @@ import {
   Edit,
   Trash2,
   Upload,
+  Volume2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -29,6 +30,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useCards } from '@/hooks/useCards'
 import { useDecks } from '@/hooks/useDecks'
+import { useTTS } from '@/hooks/useTTS'
 import { getCardState } from '@/lib/fsrs'
 import { formatRelativeTime } from '@/lib/utils'
 import { CardEditor } from './CardEditor'
@@ -44,6 +46,7 @@ interface DeckViewProps {
 export function DeckView({ deck, onBack, onStudy }: DeckViewProps) {
   const { cards, deleteCard, dueCards } = useCards(deck.id)
   const { getDeckStats } = useDecks()
+  const { speak } = useTTS()
   const [searchQuery, setSearchQuery] = useState('')
   const [stats, setStats] = useState<DeckStats | null>(null)
   const [cardEditorOpen, setCardEditorOpen] = useState(false)
@@ -198,7 +201,22 @@ export function DeckView({ deck, onBack, onStudy }: DeckViewProps) {
                           Due: {formatRelativeTime(card.fsrs.due)}
                         </span>
                       </div>
-                      <p className="font-medium truncate">{card.front}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium truncate">{card.front}</p>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 flex-shrink-0"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            // Use audio field (Chinese characters) if available, otherwise fall back to front (Pinyin)
+                            speak(card.audio || card.front)
+                          }}
+                          title="Play audio"
+                        >
+                          <Volume2 className="h-3 w-3" />
+                        </Button>
+                      </div>
                       <p className="text-sm text-muted-foreground truncate mt-1">
                         {card.back}
                       </p>

@@ -126,7 +126,7 @@ export function useCards(deckId?: string) {
 
   const importCards = async (
     targetDeckId: string,
-    cardsData: Array<{ front: string; back: string; tags?: string[]; type?: CardType }>
+    cardsData: Array<{ front: string; back: string; audio?: string; tags?: string[]; type?: CardType }>
   ): Promise<number> => {
     const now = new Date()
     const newCards: Card[] = cardsData.map((data) => ({
@@ -135,6 +135,7 @@ export function useCards(deckId?: string) {
       type: data.type || 'basic',
       front: data.front,
       back: data.back,
+      audio: data.audio,
       tags: data.tags || [],
       createdAt: now,
       updatedAt: now,

@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useMemo } from 'react'
-import { ArrowLeft, RotateCcw, X, Eye } from 'lucide-react'
+import { ArrowLeft, RotateCcw, X, Eye, Volume2, VolumeX, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -11,6 +11,7 @@ import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { useStudySession, Rating } from '@/hooks/useStudySession'
+import { useTTS } from '@/hooks/useTTS'
 import { getCardState } from '@/lib/fsrs'
 import type { Deck } from '@/types'
 
@@ -36,6 +37,14 @@ export function StudyView({ deck, onBack, onComplete }: StudyViewProps) {
     getSchedulingInfo,
   } = useStudySession(deck.id)
 
+  const {
+    speak,
+    stop: stopTTS,
+    isPlaying: isTTSPlaying,
+    isLoading: isTTSLoading,
+    serverAvailable: ttsServerAvailable,
+  } = useTTS()
+
   const schedulingInfo = useMemo(() => {
     if (currentCard && showingAnswer) {
       return getSchedulingInfo()
@@ -49,9 +58,38 @@ export function StudyView({ deck, onBack, onComplete }: StudyViewProps) {
     }
   }, [isStudying, dueCount, startSession])
 
+  // Play audio for front text (use audio field if available, otherwise front)
+  const playFrontAudio = useCallback(() => {
+    if (currentCard) {
+      // Use audio field (Chinese characters) if available, otherwise fall back to front (Pinyin)
+      speak(currentCard.audio || currentCard.front)
+    }
+  }, [currentCard, speak])
+
+  // Play audio for back text (answer)
+  const playBackAudio = useCallback(() => {
+    if (currentCard) {
+      speak(currentCard.back)
+    }
+  }, [currentCard, speak])
+
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (!isStudying) return
+
+      // 'S' key to speak front text
+      if (e.key === 's' || e.key === 'S') {
+        e.preventDefault()
+        playFrontAudio()
+        return
+      }
+
+      // 'A' key to speak back text (when showing answer)
+      if ((e.key === 'a' || e.key === 'A') && showingAnswer) {
+        e.preventDefault()
+        playBackAudio()
+        return
+      }
 
       if (!showingAnswer) {
         if (e.code === 'Space' || e.key === 'Enter') {
@@ -75,7 +113,7 @@ export function StudyView({ deck, onBack, onComplete }: StudyViewProps) {
         }
       }
     },
-    [isStudying, showingAnswer, showAnswer, answerCard]
+    [isStudying, showingAnswer, showAnswer, answerCard, playFrontAudio, playBackAudio]
   )
 
   useEffect(() => {
@@ -234,9 +272,32 @@ export function StudyView({ deck, onBack, onComplete }: StudyViewProps) {
           <CardContent className="flex-1 flex flex-col justify-center">
             {/* Question */}
             <div className="text-center mb-8">
-              <p className="text-xl font-medium whitespace-pre-wrap">
-                {currentCard.front}
-              </p>
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <p className="text-xl font-medium whitespace-pre-wrap">
+                  {currentCard.front}
+                </p>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 flex-shrink-0"
+                  onClick={playFrontAudio}
+                  disabled={isTTSLoading}
+                  title="Play audio (S)"
+                >
+                  {isTTSLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : isTTSPlaying ? (
+                    <VolumeX className="h-4 w-4" onClick={(e) => { e.stopPropagation(); stopTTS(); }} />
+                  ) : (
+                    <Volume2 className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+              {ttsServerAvailable === false && (
+                <p className="text-xs text-muted-foreground">
+                  TTS server offline - using browser speech
+                </p>
+              )}
             </div>
 
             {/* Answer */}
@@ -244,9 +305,25 @@ export function StudyView({ deck, onBack, onComplete }: StudyViewProps) {
               <>
                 <Separator className="my-6" />
                 <div className="text-center">
-                  <p className="text-lg whitespace-pre-wrap text-muted-foreground">
-                    {currentCard.back}
-                  </p>
+                  <div className="flex items-center justify-center gap-2">
+                    <p className="text-lg whitespace-pre-wrap text-muted-foreground">
+                      {currentCard.back}
+                    </p>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 flex-shrink-0"
+                      onClick={playBackAudio}
+                      disabled={isTTSLoading}
+                      title="Play answer audio (A)"
+                    >
+                      {isTTSLoading ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Volume2 className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
                 </div>
               </>
             )}
@@ -312,7 +389,7 @@ export function StudyView({ deck, onBack, onComplete }: StudyViewProps) {
 
       {/* Keyboard shortcuts hint */}
       <p className="text-center text-xs text-muted-foreground">
-        Keyboard shortcuts: Space/Enter to show answer, 1-4 to rate
+        Keyboard: Space/Enter = show answer, 1-4 = rate, S = speak question, A = speak answer
       </p>
     </div>
   )

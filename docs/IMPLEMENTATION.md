@@ -91,8 +91,9 @@ Using Dexie.js with IndexedDB for offline-first storage:
 **cards**
 - `id` (string, primary key) - UUID
 - `deckId` (string, indexed) - Foreign key to deck
-- `front` (string) - Question/prompt
-- `back` (string) - Answer
+- `front` (string) - Question/prompt (e.g., Pinyin)
+- `back` (string) - Answer (e.g., English translation)
+- `audio` (string, optional) - Text for TTS (e.g., Chinese characters if front is Pinyin)
 - `tags` (string[]) - Card tags
 - `createdAt` (Date)
 - `updatedAt` (Date)
@@ -262,9 +263,21 @@ npm run preview  # Preview production build
 - ES2020+ features (uses `esnext` build target)
 - Offline-capable (all data stored locally)
 
+## Text-to-Speech (TTS)
+
+The app integrates with IndexTTS for high-quality Chinese/Pinyin audio:
+
+- **IndexTTS Server**: Python FastAPI backend using IndexTTS model
+- **Audio Playback**: Speaker buttons in study view and card list
+- **Keyboard Shortcuts**: `S` to speak question, `A` to speak answer
+- **Fallback**: Browser Web Speech API when server unavailable
+- **Caching**: Server-side audio caching for faster playback
+
+See `docs/TTS.md` for setup and configuration.
+
 ## Future Enhancements
 Potential features for future development:
-- Rich media support (images, audio)
+- Rich media support (images)
 - Cloze deletion cards
 - Multiple choice cards
 - Cloud sync (Firebase/Supabase)

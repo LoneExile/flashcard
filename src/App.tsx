@@ -96,6 +96,7 @@ function App() {
           deckData.cards.map((c) => ({
             front: c.front,
             back: c.back,
+            audio: c.audio,
             tags: c.tags,
           }))
         )
