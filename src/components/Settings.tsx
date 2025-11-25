@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Moon, Sun, Monitor, Trash2, Download, Upload, Volume2, Cloud, CloudUpload, CloudDownload, RefreshCw } from 'lucide-react'
-import { CHINESE_VOICES, getVoice, setVoice, type VoiceKey } from '@/lib/tts'
+import { CHINESE_VOICES, getVoice, setVoice, getSpeed, setSpeed, getPitch, setPitch, type VoiceKey } from '@/lib/tts'
+import { useTTS } from '@/hooks/useTTS'
 import { checkServerStatus, syncToServer, syncFromServer, getApiUrl } from '@/lib/api'
 import {
   Card,
@@ -43,9 +44,14 @@ export function Settings() {
   const [dailyGoal, setDailyGoal] = useState(20)
   const [exportLoading, setExportLoading] = useState(false)
   const [selectedVoice, setSelectedVoice] = useState<VoiceKey>(getVoice())
+  const [voiceSpeed, setVoiceSpeed] = useState(getSpeed())
+  const [voicePitch, setVoicePitch] = useState(getPitch())
+  const [sampleText, setSampleText] = useState('你好，我正在学习中文')
   const [serverOnline, setServerOnline] = useState<boolean | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
+
+  const { speak, isPlaying, isLoading: ttsLoading } = useTTS()
 
   useEffect(() => {
     if (settings) {
@@ -83,6 +89,22 @@ export function Settings() {
   const handleVoiceChange = (voice: VoiceKey) => {
     setSelectedVoice(voice)
     setVoice(voice)
+  }
+
+  const handleSpeedChange = (speed: number) => {
+    setVoiceSpeed(speed)
+    setSpeed(speed)
+  }
+
+  const handlePitchChange = (pitch: number) => {
+    setVoicePitch(pitch)
+    setPitch(pitch)
+  }
+
+  const handleTestVoice = () => {
+    if (sampleText.trim()) {
+      speak(sampleText)
+    }
   }
 
   const handleExport = async () => {
@@ -330,9 +352,9 @@ export function Settings() {
       <Card>
         <CardHeader>
           <CardTitle>Voice Settings</CardTitle>
-          <CardDescription>Choose a Chinese voice for text-to-speech</CardDescription>
+          <CardDescription>Configure text-to-speech voice and parameters</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-6">
           <div className="space-y-2">
             <Label>Chinese Voice</Label>
             <Select
@@ -358,6 +380,79 @@ export function Settings() {
             </Select>
             <p className="text-xs text-muted-foreground">
               Uses Microsoft Edge neural voices for natural-sounding Chinese speech
+            </p>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="voiceSpeed">Speed</Label>
+                <span className="text-sm text-muted-foreground">{voiceSpeed.toFixed(1)}x</span>
+              </div>
+              <input
+                id="voiceSpeed"
+                type="range"
+                min="0.5"
+                max="2"
+                step="0.1"
+                value={voiceSpeed}
+                onChange={(e) => handleSpeedChange(parseFloat(e.target.value))}
+                className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+              />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>0.5x (Slow)</span>
+                <span>1.0x</span>
+                <span>2.0x (Fast)</span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="voicePitch">Pitch</Label>
+                <span className="text-sm text-muted-foreground">{voicePitch.toFixed(1)}</span>
+              </div>
+              <input
+                id="voicePitch"
+                type="range"
+                min="0.5"
+                max="2"
+                step="0.1"
+                value={voicePitch}
+                onChange={(e) => handlePitchChange(parseFloat(e.target.value))}
+                className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+              />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>0.5 (Low)</span>
+                <span>1.0</span>
+                <span>2.0 (High)</span>
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-2">
+            <Label htmlFor="sampleText">Test Voice</Label>
+            <div className="flex gap-2">
+              <Input
+                id="sampleText"
+                placeholder="Enter text to test"
+                value={sampleText}
+                onChange={(e) => setSampleText(e.target.value)}
+                className="font-mono"
+              />
+              <Button
+                onClick={handleTestVoice}
+                disabled={!sampleText.trim() || isPlaying || ttsLoading}
+              >
+                <Volume2 className="mr-2 h-4 w-4" />
+                {isPlaying ? 'Playing...' : ttsLoading ? 'Loading...' : 'Test'}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Enter Chinese text to test the current voice settings
             </p>
           </div>
         </CardContent>

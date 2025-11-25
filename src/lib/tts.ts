@@ -25,6 +25,10 @@ export type VoiceKey = keyof typeof CHINESE_VOICES
 // Current voice setting (stored in localStorage)
 let currentVoice: VoiceKey = (localStorage.getItem('tts-voice') as VoiceKey) || 'xiaoxiao'
 
+// TTS settings (speed: 0.5-2.0, pitch: 0.5-2.0)
+let currentSpeed: number = parseFloat(localStorage.getItem('tts-speed') || '1.0')
+let currentPitch: number = parseFloat(localStorage.getItem('tts-pitch') || '1.0')
+
 export function setVoice(voice: VoiceKey): void {
   currentVoice = voice
   localStorage.setItem('tts-voice', voice)
@@ -33,6 +37,26 @@ export function setVoice(voice: VoiceKey): void {
 
 export function getVoice(): VoiceKey {
   return currentVoice
+}
+
+export function setSpeed(speed: number): void {
+  currentSpeed = Math.max(0.5, Math.min(2.0, speed))
+  localStorage.setItem('tts-speed', currentSpeed.toString())
+  clearAudioCache() // Clear cache when speed changes
+}
+
+export function getSpeed(): number {
+  return currentSpeed
+}
+
+export function setPitch(pitch: number): void {
+  currentPitch = Math.max(0.5, Math.min(2.0, pitch))
+  localStorage.setItem('tts-pitch', currentPitch.toString())
+  clearAudioCache() // Clear cache when pitch changes
+}
+
+export function getPitch(): number {
+  return currentPitch
 }
 
 // Audio cache for played audio
@@ -77,7 +101,13 @@ export async function checkServerStatus(): Promise<boolean> {
  */
 function getServerAudioUrl(text: string): string {
   const voice = CHINESE_VOICES[currentVoice].id
-  const params = new URLSearchParams({ text, voice })
+  // Convert speed to percentage (1.0 = +0%, 0.5 = -50%, 2.0 = +100%)
+  const ratePercent = Math.round((currentSpeed - 1) * 100)
+  const rate = ratePercent >= 0 ? `+${ratePercent}%` : `${ratePercent}%`
+  // Convert pitch to Hz adjustment (1.0 = +0Hz, etc.)
+  const pitchHz = Math.round((currentPitch - 1) * 50)
+  const pitch = pitchHz >= 0 ? `+${pitchHz}Hz` : `${pitchHz}Hz`
+  const params = new URLSearchParams({ text, voice, rate, pitch })
   return `${TTS_SERVER_URL}/tts?${params.toString()}`
 }
 
@@ -85,7 +115,7 @@ function getServerAudioUrl(text: string): string {
  * Play audio using Edge-TTS server
  */
 async function playWithServer(text: string): Promise<HTMLAudioElement> {
-  const cacheKey = `server:${currentVoice}:${text}`
+  const cacheKey = `server:${currentVoice}:${currentSpeed}:${currentPitch}:${text}`
 
   // Check cache
   if (USE_CACHE && audioCache.has(cacheKey)) {
@@ -135,8 +165,8 @@ async function playWithWebSpeech(text: string, lang: string = 'zh-CN'): Promise<
 
     const utterance = new SpeechSynthesisUtterance(text)
     utterance.lang = lang
-    utterance.rate = 0.9 // Slightly slower for learning
-    utterance.pitch = 1
+    utterance.rate = currentSpeed
+    utterance.pitch = currentPitch
 
     // Try to find a Chinese voice
     const voices = window.speechSynthesis.getVoices()
