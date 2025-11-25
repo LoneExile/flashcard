@@ -37,14 +37,17 @@ export function useTTS(options: UseTTSOptions = {}) {
     }
   }, [autoCheckServer])
 
-  const speakText = useCallback(async (text: string) => {
+  const speakText = useCallback(async (
+    text: string,
+    speakOptions?: { forceServer?: boolean; forceWebSpeech?: boolean; lang?: string }
+  ) => {
     if (!text.trim()) return
 
     setState((prev) => ({ ...prev, isLoading: true, error: null }))
 
     try {
       setState((prev) => ({ ...prev, isPlaying: true, isLoading: false }))
-      await speak(text)
+      await speak(text, speakOptions)
     } catch (err) {
       setState((prev) => ({
         ...prev,

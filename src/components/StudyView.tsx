@@ -66,10 +66,10 @@ export function StudyView({ deck, onBack, onComplete }: StudyViewProps) {
     }
   }, [currentCard, speak])
 
-  // Play audio for back text (answer)
+  // Play audio for back text (answer) - use English language
   const playBackAudio = useCallback(() => {
     if (currentCard) {
-      speak(currentCard.back)
+      speak(currentCard.back, { lang: 'en-US' })
     }
   }, [currentCard, speak])
 
