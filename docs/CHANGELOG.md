@@ -1,5 +1,29 @@
 # Changelog
 
+## v1.1.0 (2025-11-26)
+
+### Bidirectional Study
+- **Reverse cards**: Create cards in both directions (中→EN and EN→中)
+- **Direction field**: Cards now have `direction` ('normal' or 'reverse') and `pairId` to link pairs
+- **Generate Reverse button**: In deck view, generate reverse cards for all existing cards that don't have one
+- **Direction filter**: Filter study sessions by direction (All, 中→EN only, EN→中 only)
+- **Pre-session screen**: Shows card counts by direction before starting study
+- **Checkbox options**: "Also create reverse card" when creating/importing cards
+
+### Voice Settings Enhancements
+- **Speed control**: Adjust voice speed from 0.5x (slow) to 2.0x (fast)
+- **Pitch control**: Adjust voice pitch from 0.5 (low) to 2.0 (high)
+- **Sample text testing**: Enter custom text and test voice settings
+- **Test button**: Preview voice with current speed/pitch settings
+- Settings persisted to localStorage (`tts-speed`, `tts-pitch`)
+
+### Improvements
+- Cards without `direction` field treated as 'normal' for backward compatibility
+- Audio cache cleared when voice/speed/pitch changes
+- Speed/pitch parameters sent to Edge-TTS server
+
+---
+
 ## v1.0.0 (2025-11-25)
 
 ### Initial Release

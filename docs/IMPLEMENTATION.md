@@ -112,6 +112,9 @@ Using Dexie.js with IndexedDB for offline-first storage:
 **cards**
 - `id` (string, primary key) - UUID
 - `deckId` (string, indexed) - Foreign key to deck
+- `type` (CardType) - basic, cloze, reversible
+- `direction` (CardDirection) - 'normal' or 'reverse' for bidirectional study
+- `pairId` (string, optional) - Links normal and reverse cards together
 - `front` (string) - Question/prompt (e.g., Pinyin)
 - `back` (string) - Answer (e.g., English translation)
 - `audio` (string, optional) - Text for TTS (e.g., Chinese characters if front is Pinyin)
@@ -195,6 +198,9 @@ const defaultParams: Partial<FSRSParameters> = {
 
 ### 3. Study Sessions
 - FSRS-powered scheduling
+- **Bidirectional study support** (中→EN and EN→中)
+- **Direction filter** to select which cards to study
+- Pre-session screen showing card counts by direction
 - Four rating buttons with interval previews
 - Keyboard shortcuts:
   - `Space` or `Enter` - Show answer
@@ -202,9 +208,29 @@ const defaultParams: Partial<FSRSParameters> = {
   - `2` - Hard
   - `3` - Good
   - `4` - Easy
+  - `S` - Speak question
+  - `A` - Speak answer
 - Session statistics (cards studied, correct rate, rating breakdown)
 - "Again" cards re-enter queue at random position
 - Progress bar during session
+
+### 3.1 Bidirectional Study
+Cards can have two directions for comprehensive learning:
+
+| Direction | Example | Use Case |
+|-----------|---------|----------|
+| Normal (中→EN) | Pinyin → English | Reading/listening |
+| Reverse (EN→中) | English → Pinyin | Recall/production |
+
+**Creating reverse cards:**
+- When creating a new card, check "Also create reverse card"
+- When importing, check "Also create reverse cards"
+- Use "Generate Reverse" button in deck view to create reverse cards for existing cards
+
+**Direction filter:**
+- Filter stored in localStorage as `study-direction-filter`
+- Options: All cards, 中 → EN only, EN → 中 only
+- Each direction is scheduled independently with FSRS
 
 ### 4. Import/Export
 **Import Formats:**
@@ -229,7 +255,12 @@ const defaultParams: Partial<FSRSParameters> = {
 ### 6. Settings
 - Theme toggle (Light/Dark/System)
 - Daily goal configuration
-- Voice selection (6+ Chinese neural voices)
+- **Voice Settings:**
+  - Voice selection (6+ Chinese neural voices)
+  - Speed control (0.5x - 2.0x)
+  - Pitch control (0.5 - 2.0)
+  - Sample text input for testing
+  - Test button to preview voice
 - Backend sync (upload/download to SQLite server)
 - Data export (JSON)
 - Data import (full restore)
@@ -238,6 +269,9 @@ const defaultParams: Partial<FSRSParameters> = {
 ### 7. Text-to-Speech
 - Chinese TTS using Microsoft Edge neural voices
 - Voice selection in Settings (xiaoxiao, yunxi, etc.)
+- **Speed control** (0.5x slow to 2.0x fast)
+- **Pitch control** (0.5 low to 2.0 high)
+- **Sample text testing** in Settings
 - Keyboard shortcuts: `S` for question, `A` for answer
 - Automatic language detection (Chinese/English)
 - Server-side audio caching

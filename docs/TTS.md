@@ -22,6 +22,9 @@ The Flashcard App supports high-quality audio playback for Chinese cards using M
 
 - **Edge-TTS Integration**: High-quality Microsoft Edge neural voices for Chinese
 - **Multiple Voice Options**: 6+ Chinese voices with different styles
+- **Speed Control**: Adjust playback speed from 0.5x (slow) to 2.0x (fast)
+- **Pitch Control**: Adjust voice pitch from 0.5 (low) to 2.0 (high)
+- **Sample Text Testing**: Test voice settings with custom text in Settings
 - **Automatic Fallback**: Uses browser Web Speech API if server unavailable
 - **Audio Caching**: Server caches generated audio for faster playback
 - **Audio Field Support**: Cards can have an optional `audio` field with Chinese characters for correct pronunciation when `front` contains Pinyin
@@ -85,6 +88,26 @@ VITE_API_URL=http://your-server:8000
 2. Select a Chinese voice from the dropdown
 3. The selected voice is saved to localStorage
 
+### Speed & Pitch
+
+1. Go to **Settings** > **Voice Settings**
+2. Use the **Speed** slider (0.5x - 2.0x)
+   - 0.5x: Slow (good for beginners)
+   - 1.0x: Normal
+   - 2.0x: Fast
+3. Use the **Pitch** slider (0.5 - 2.0)
+   - 0.5: Lower pitch
+   - 1.0: Normal
+   - 2.0: Higher pitch
+4. Settings are saved to localStorage (`tts-speed`, `tts-pitch`)
+
+### Testing Voice Settings
+
+1. Go to **Settings** > **Voice Settings**
+2. Enter sample text in the "Test Voice" input (default: 你好，我正在学习中文)
+3. Click **Test** button to hear the voice with current settings
+4. Adjust speed/pitch and test again until satisfied
+
 ### In Study Mode
 
 1. Click the speaker icon next to the question to hear pronunciation
@@ -126,7 +149,18 @@ speak('Hello world', { lang: 'en-US' })  // English (uses Web Speech API)
 ### TTS Service Functions
 
 ```typescript
-import { speak, stopSpeaking, checkServerStatus, setVoice, getVoice, CHINESE_VOICES } from '@/lib/tts'
+import {
+  speak,
+  stopSpeaking,
+  checkServerStatus,
+  setVoice,
+  getVoice,
+  setSpeed,
+  getSpeed,
+  setPitch,
+  getPitch,
+  CHINESE_VOICES
+} from '@/lib/tts'
 
 // Speak text (auto-selects best available method)
 await speak('你好世界')
@@ -140,6 +174,19 @@ setVoice('yunxi')  // Changes to male cheerful voice
 
 // Get current voice
 const currentVoice = getVoice()  // Returns 'xiaoxiao' by default
+
+// Change speed (0.5 - 2.0)
+setSpeed(0.8)  // Slower for learning
+setSpeed(1.5)  // Faster playback
+
+// Get current speed
+const speed = getSpeed()  // Returns 1.0 by default
+
+// Change pitch (0.5 - 2.0)
+setPitch(1.2)  // Higher pitch
+
+// Get current pitch
+const pitch = getPitch()  // Returns 1.0 by default
 
 // Stop all audio
 stopSpeaking()
