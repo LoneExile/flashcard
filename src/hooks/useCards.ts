@@ -1,7 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { v4 as uuidv4 } from 'uuid'
 import { db } from '@/db'
-import type { Card, CardType, ReviewLog } from '@/types'
+import type { Card, CardType, CardDirection, ReviewLog } from '@/types'
 import {
   createNewFSRSCard,
   scheduleCard,
@@ -35,24 +35,66 @@ export function useCards(deckId?: string) {
     targetDeckId: string,
     front: string,
     back: string,
-    type: CardType = 'basic',
-    tags: string[] = []
-  ): Promise<Card> => {
+    options: {
+      type?: CardType
+      tags?: string[]
+      audio?: string
+      direction?: CardDirection
+      createReverse?: boolean
+    } = {}
+  ): Promise<Card[]> => {
+    const {
+      type = 'basic',
+      tags = [],
+      audio,
+      direction = 'normal',
+      createReverse = false,
+    } = options
+
     const now = new Date()
+    const pairId = createReverse ? uuidv4() : undefined
+    const cards: Card[] = []
+
+    // Create the main card
     const card: Card = {
       id: uuidv4(),
       deckId: targetDeckId,
       type,
+      direction,
+      pairId,
       front,
       back,
+      audio,
       tags,
       createdAt: now,
       updatedAt: now,
       fsrs: createNewFSRSCard(),
       mediaUrls: [],
     }
-    await db.cards.add(card)
-    return card
+    cards.push(card)
+
+    // Create reverse card if requested
+    if (createReverse) {
+      const reverseCard: Card = {
+        id: uuidv4(),
+        deckId: targetDeckId,
+        type,
+        direction: 'reverse',
+        pairId,
+        front: back,  // Swap front and back
+        back: front,
+        audio,  // Keep audio (Chinese characters) for TTS on the answer side
+        tags: [...tags, 'reverse'],
+        createdAt: now,
+        updatedAt: now,
+        fsrs: createNewFSRSCard(),
+        mediaUrls: [],
+      }
+      cards.push(reverseCard)
+    }
+
+    await db.cards.bulkAdd(cards)
+    return cards
   }
 
   const updateCard = async (
@@ -124,24 +166,118 @@ export function useCards(deckId?: string) {
       .toArray()
   }
 
+  const generateReverseCards = async (targetDeckId: string): Promise<number> => {
+    // Find all normal cards that don't have a reverse pair
+    const allCards = await db.cards.where('deckId').equals(targetDeckId).toArray()
+
+    // Get cards that are normal (or undefined direction) and don't have a pairId
+    const cardsWithoutReverse = allCards.filter(card =>
+      (card.direction === 'normal' || !card.direction) && !card.pairId
+    )
+
+    if (cardsWithoutReverse.length === 0) {
+      return 0
+    }
+
+    const now = new Date()
+    const newCards: Card[] = []
+    const updates: { id: string; pairId: string; direction: CardDirection }[] = []
+
+    for (const card of cardsWithoutReverse) {
+      const pairId = uuidv4()
+
+      // Update the original card with pairId and direction
+      updates.push({ id: card.id, pairId, direction: 'normal' })
+
+      // Create reverse card
+      newCards.push({
+        id: uuidv4(),
+        deckId: targetDeckId,
+        type: card.type,
+        direction: 'reverse',
+        pairId,
+        front: card.back,  // Swap
+        back: card.front,
+        audio: card.audio,  // Keep for TTS
+        tags: [...card.tags.filter(t => t !== 'reverse'), 'reverse'],
+        createdAt: now,
+        updatedAt: now,
+        fsrs: createNewFSRSCard(),
+        mediaUrls: [],
+      })
+    }
+
+    await db.transaction('rw', db.cards, async () => {
+      // Update original cards with pairId
+      for (const update of updates) {
+        await db.cards.update(update.id, {
+          pairId: update.pairId,
+          direction: update.direction,
+          updatedAt: now
+        })
+      }
+      // Add new reverse cards
+      await db.cards.bulkAdd(newCards)
+    })
+
+    return newCards.length
+  }
+
   const importCards = async (
     targetDeckId: string,
-    cardsData: Array<{ front: string; back: string; audio?: string; tags?: string[]; type?: CardType }>
+    cardsData: Array<{
+      front: string
+      back: string
+      audio?: string
+      tags?: string[]
+      type?: CardType
+      createReverse?: boolean
+    }>,
+    defaultCreateReverse: boolean = false
   ): Promise<number> => {
     const now = new Date()
-    const newCards: Card[] = cardsData.map((data) => ({
-      id: uuidv4(),
-      deckId: targetDeckId,
-      type: data.type || 'basic',
-      front: data.front,
-      back: data.back,
-      audio: data.audio,
-      tags: data.tags || [],
-      createdAt: now,
-      updatedAt: now,
-      fsrs: createNewFSRSCard(),
-      mediaUrls: [],
-    }))
+    const newCards: Card[] = []
+
+    for (const data of cardsData) {
+      const shouldCreateReverse = data.createReverse ?? defaultCreateReverse
+      const pairId = shouldCreateReverse ? uuidv4() : undefined
+
+      // Normal card
+      newCards.push({
+        id: uuidv4(),
+        deckId: targetDeckId,
+        type: data.type || 'basic',
+        direction: 'normal',
+        pairId,
+        front: data.front,
+        back: data.back,
+        audio: data.audio,
+        tags: data.tags || [],
+        createdAt: now,
+        updatedAt: now,
+        fsrs: createNewFSRSCard(),
+        mediaUrls: [],
+      })
+
+      // Reverse card if requested
+      if (shouldCreateReverse) {
+        newCards.push({
+          id: uuidv4(),
+          deckId: targetDeckId,
+          type: data.type || 'basic',
+          direction: 'reverse',
+          pairId,
+          front: data.back,  // Swap
+          back: data.front,
+          audio: data.audio,  // Keep for TTS
+          tags: [...(data.tags || []), 'reverse'],
+          createdAt: now,
+          updatedAt: now,
+          fsrs: createNewFSRSCard(),
+          mediaUrls: [],
+        })
+      }
+    }
 
     await db.cards.bulkAdd(newCards)
     return newCards.length
@@ -157,6 +293,7 @@ export function useCards(deckId?: string) {
     getCardsByTag,
     searchCards,
     importCards,
+    generateReverseCards,
   }
 }
 

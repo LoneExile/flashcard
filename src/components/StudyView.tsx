@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { ArrowLeft, RotateCcw, X, Eye, Volume2, VolumeX, Loader2, ArrowLeftRight } from 'lucide-react'
+import { ArrowLeft, RotateCcw, X, Eye, Volume2, VolumeX, Loader2, Filter } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -10,9 +10,18 @@ import {
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { useStudySession, Rating } from '@/hooks/useStudySession'
+import { useCards } from '@/hooks/useCards'
+import type { CardDirection } from '@/types'
 import { useTTS } from '@/hooks/useTTS'
-import { getCardState } from '@/lib/fsrs'
+import { getCardState, isDue } from '@/lib/fsrs'
 import type { Deck } from '@/types'
 
 interface StudyViewProps {
@@ -21,19 +30,20 @@ interface StudyViewProps {
   onComplete: () => void
 }
 
+type DirectionFilter = 'all' | CardDirection
+
 export function StudyView({ deck, onBack, onComplete }: StudyViewProps) {
-  // Reverse mode: show answer first, recall the question (Pinyin/Chinese)
-  const [reverseMode, setReverseMode] = useState(() => {
-    return localStorage.getItem('study-reverse-mode') === 'true'
+  // Direction filter state (persisted in localStorage)
+  const [directionFilter, setDirectionFilter] = useState<DirectionFilter>(() => {
+    return (localStorage.getItem('study-direction-filter') as DirectionFilter) || 'all'
   })
 
-  const toggleReverseMode = useCallback(() => {
-    setReverseMode(prev => {
-      const newValue = !prev
-      localStorage.setItem('study-reverse-mode', String(newValue))
-      return newValue
-    })
-  }, [])
+  const handleFilterChange = (filter: DirectionFilter) => {
+    setDirectionFilter(filter)
+    localStorage.setItem('study-direction-filter', filter)
+  }
+
+  const { dueCards } = useCards(deck.id)
 
   const {
     isStudying,
@@ -42,7 +52,6 @@ export function StudyView({ deck, onBack, onComplete }: StudyViewProps) {
     totalCards,
     showingAnswer,
     sessionStats,
-    dueCount,
     startSession,
     showAnswer,
     answerCard,
@@ -65,52 +74,55 @@ export function StudyView({ deck, onBack, onComplete }: StudyViewProps) {
     return null
   }, [currentCard, showingAnswer, getSchedulingInfo])
 
-  // In reverse mode, swap question and answer
-  const questionText = useMemo(() => {
-    if (!currentCard) return ''
-    return reverseMode ? currentCard.back : currentCard.front
-  }, [currentCard, reverseMode])
+  // Check if this is a reverse card
+  const isReverseCard = currentCard?.direction === 'reverse'
 
-  const answerText = useMemo(() => {
-    if (!currentCard) return ''
-    return reverseMode ? currentCard.front : currentCard.back
-  }, [currentCard, reverseMode])
+  // Filter due cards by direction
+  // Cards without direction field are treated as 'normal'
+  const filteredDueCards = useMemo(() => {
+    const dueDeck = dueCards.filter(c => isDue(c.fsrs))
+    if (directionFilter === 'all') return dueDeck
+    return dueDeck.filter(c => (c.direction || 'normal') === directionFilter)
+  }, [dueCards, directionFilter])
 
-  // Audio text for question (Chinese characters if available)
-  const questionAudioText = useMemo(() => {
-    if (!currentCard) return ''
-    // In normal mode: use audio field or front
-    // In reverse mode: use back (English)
-    return reverseMode ? currentCard.back : (currentCard.audio || currentCard.front)
-  }, [currentCard, reverseMode])
+  const filteredDueCount = filteredDueCards.length
 
-  // Language for TTS
-  const questionLang = reverseMode ? 'en-US' : undefined  // undefined = Chinese (default)
-  const answerLang = reverseMode ? undefined : 'en-US'
+  // TTS language based on card direction
+  // Normal card: front is Chinese (Pinyin), back is English
+  // Reverse card: front is English, back is Chinese (Pinyin)
+  const questionLang = isReverseCard ? 'en-US' : undefined  // undefined = Chinese (default)
+  const answerLang = isReverseCard ? undefined : 'en-US'
 
-  useEffect(() => {
-    if (!isStudying && dueCount > 0) {
-      startSession()
+  // Don't auto-start - let user choose filter first
+  const handleStartStudy = useCallback(() => {
+    if (filteredDueCount > 0) {
+      startSession(filteredDueCards)
     }
-  }, [isStudying, dueCount, startSession])
+  }, [filteredDueCount, filteredDueCards, startSession])
 
-  // Play audio for question (respects reverse mode)
+  // Play audio for question (front of card)
   const playQuestionAudio = useCallback(() => {
     if (currentCard) {
-      speak(questionAudioText, questionLang ? { lang: questionLang } : undefined)
+      // For normal cards: use audio field (Chinese) if available, otherwise front (Pinyin)
+      // For reverse cards: front is English, no audio field needed
+      const audioText = isReverseCard
+        ? currentCard.front
+        : (currentCard.audio || currentCard.front)
+      speak(audioText, questionLang ? { lang: questionLang } : undefined)
     }
-  }, [currentCard, questionAudioText, questionLang, speak])
+  }, [currentCard, isReverseCard, questionLang, speak])
 
-  // Play audio for answer (respects reverse mode)
+  // Play audio for answer (back of card)
   const playAnswerAudio = useCallback(() => {
     if (currentCard) {
-      // In reverse mode, answer is front (Pinyin/Chinese) - use audio field if available
-      const audioText = reverseMode
-        ? (currentCard.audio || currentCard.front)
+      // For normal cards: back is English
+      // For reverse cards: back is Pinyin, use audio field (Chinese) if available
+      const audioText = isReverseCard
+        ? (currentCard.audio || currentCard.back)
         : currentCard.back
       speak(audioText, answerLang ? { lang: answerLang } : undefined)
     }
-  }, [currentCard, reverseMode, answerLang, speak])
+  }, [currentCard, isReverseCard, answerLang, speak])
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -127,13 +139,6 @@ export function StudyView({ deck, onBack, onComplete }: StudyViewProps) {
       if ((e.key === 'a' || e.key === 'A') && showingAnswer) {
         e.preventDefault()
         playAnswerAudio()
-        return
-      }
-
-      // 'R' key to toggle reverse mode
-      if (e.key === 'r' || e.key === 'R') {
-        e.preventDefault()
-        toggleReverseMode()
         return
       }
 
@@ -159,7 +164,7 @@ export function StudyView({ deck, onBack, onComplete }: StudyViewProps) {
         }
       }
     },
-    [isStudying, showingAnswer, showAnswer, answerCard, playQuestionAudio, playAnswerAudio, toggleReverseMode]
+    [isStudying, showingAnswer, showAnswer, answerCard, playQuestionAudio, playAnswerAudio]
   )
 
   useEffect(() => {
@@ -234,16 +239,99 @@ export function StudyView({ deck, onBack, onComplete }: StudyViewProps) {
               </div>
             </div>
           </CardContent>
-          <CardFooter className="flex justify-center gap-4">
-            <Button variant="outline" onClick={onBack}>
-              Back to Deck
-            </Button>
-            {dueCount > 0 && (
-              <Button onClick={() => startSession()}>
-                <RotateCcw className="mr-2 h-4 w-4" />
-                Study More ({dueCount})
+          <CardFooter className="flex flex-col gap-4">
+            {/* Direction filter for next session */}
+            <div className="flex items-center gap-3">
+              <Filter className="h-4 w-4 text-muted-foreground" />
+              <Select value={directionFilter} onValueChange={(v) => handleFilterChange(v as DirectionFilter)}>
+                <SelectTrigger className="w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All cards</SelectItem>
+                  <SelectItem value="normal">中 → EN</SelectItem>
+                  <SelectItem value="reverse">EN → 中</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex justify-center gap-4">
+              <Button variant="outline" onClick={onBack}>
+                Back to Deck
               </Button>
-            )}
+              {filteredDueCount > 0 && (
+                <Button onClick={() => startSession(filteredDueCards)}>
+                  <RotateCcw className="mr-2 h-4 w-4" />
+                  Study More ({filteredDueCount})
+                </Button>
+              )}
+            </div>
+          </CardFooter>
+        </Card>
+      </div>
+    )
+  }
+
+  // Pre-session: Show filter and start button
+  if (!isStudying && filteredDueCount > 0) {
+    const totalDue = dueCards.filter(c => isDue(c.fsrs)).length
+    // Cards without direction are treated as 'normal'
+    const normalCount = dueCards.filter(c => isDue(c.fsrs) && (c.direction || 'normal') === 'normal').length
+    const reverseCount = dueCards.filter(c => isDue(c.fsrs) && c.direction === 'reverse').length
+
+    return (
+      <div className="max-w-xl mx-auto space-y-6">
+        <div className="flex items-center justify-between">
+          <Button variant="ghost" onClick={onBack}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back
+          </Button>
+          <h2 className="text-xl font-bold">{deck.name}</h2>
+          <div />
+        </div>
+
+        <Card>
+          <CardHeader>
+            <h3 className="text-lg font-semibold text-center">Ready to Study</h3>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Stats */}
+            <div className="grid grid-cols-3 gap-4 text-center">
+              <div className="p-3 bg-muted rounded-lg">
+                <p className="text-2xl font-bold">{totalDue}</p>
+                <p className="text-xs text-muted-foreground">Total Due</p>
+              </div>
+              <div className="p-3 bg-muted rounded-lg">
+                <p className="text-2xl font-bold">{normalCount}</p>
+                <p className="text-xs text-muted-foreground">中 → EN</p>
+              </div>
+              <div className="p-3 bg-muted rounded-lg">
+                <p className="text-2xl font-bold">{reverseCount}</p>
+                <p className="text-xs text-muted-foreground">EN → 中</p>
+              </div>
+            </div>
+
+            {/* Direction filter */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium flex items-center gap-2">
+                <Filter className="h-4 w-4" />
+                Card Direction
+              </label>
+              <Select value={directionFilter} onValueChange={(v) => handleFilterChange(v as DirectionFilter)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All cards ({totalDue})</SelectItem>
+                  <SelectItem value="normal">中 → EN only ({normalCount})</SelectItem>
+                  <SelectItem value="reverse">EN → 中 only ({reverseCount})</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+          <CardFooter>
+            <Button className="w-full" size="lg" onClick={handleStartStudy}>
+              Start Studying ({filteredDueCount} cards)
+            </Button>
           </CardFooter>
         </Card>
       </div>
@@ -251,13 +339,36 @@ export function StudyView({ deck, onBack, onComplete }: StudyViewProps) {
   }
 
   // No Cards Due
-  if (!isStudying && dueCount === 0) {
+  if (!isStudying && filteredDueCount === 0) {
+    const totalDue = dueCards.filter(c => isDue(c.fsrs)).length
+    const normalCount = dueCards.filter(c => isDue(c.fsrs) && (c.direction || 'normal') === 'normal').length
+    const reverseCount = dueCards.filter(c => isDue(c.fsrs) && c.direction === 'reverse').length
+    const hasOtherDirection = totalDue > 0 && filteredDueCount === 0
+
     return (
       <div className="max-w-xl mx-auto text-center py-16">
         <h2 className="text-2xl font-bold mb-4">All caught up!</h2>
-        <p className="text-muted-foreground mb-6">
-          No cards are due for review right now. Come back later!
+        <p className="text-muted-foreground mb-4">
+          {hasOtherDirection
+            ? `No ${directionFilter === 'normal' ? '中 → EN' : 'EN → 中'} cards due. ${totalDue} cards available in other direction.`
+            : 'No cards are due for review right now. Come back later!'}
         </p>
+
+        {/* Direction filter */}
+        <div className="flex items-center justify-center gap-3 mb-6">
+          <Filter className="h-4 w-4 text-muted-foreground" />
+          <Select value={directionFilter} onValueChange={(v) => handleFilterChange(v as DirectionFilter)}>
+            <SelectTrigger className="w-48">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All cards ({totalDue})</SelectItem>
+              <SelectItem value="normal">中 → EN ({normalCount})</SelectItem>
+              <SelectItem value="reverse">EN → 中 ({reverseCount})</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
         <Button onClick={onBack}>
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back to Deck
@@ -276,15 +387,11 @@ export function StudyView({ deck, onBack, onComplete }: StudyViewProps) {
           End Session
         </Button>
         <div className="flex items-center gap-4">
-          <Button
-            variant={reverseMode ? "default" : "outline"}
-            size="sm"
-            onClick={toggleReverseMode}
-            title="Toggle reverse mode (R)"
-          >
-            <ArrowLeftRight className="mr-2 h-4 w-4" />
-            {reverseMode ? 'EN → 中' : '中 → EN'}
-          </Button>
+          {directionFilter !== 'all' && (
+            <Badge variant="outline" className="text-xs">
+              {directionFilter === 'normal' ? '中 → EN' : 'EN → 中'}
+            </Badge>
+          )}
           <span className="text-sm text-muted-foreground">
             {currentIndex + 1} / {totalCards}
           </span>
@@ -300,21 +407,28 @@ export function StudyView({ deck, onBack, onComplete }: StudyViewProps) {
         <Card className="min-h-[400px] flex flex-col">
           <CardHeader className="flex-shrink-0">
             <div className="flex items-center justify-between">
-              <Badge
-                variant={
-                  getCardState(currentCard.fsrs) === 'New'
-                    ? 'info'
-                    : getCardState(currentCard.fsrs) === 'Learning' ||
-                        getCardState(currentCard.fsrs) === 'Relearning'
-                      ? 'warning'
-                      : 'success'
-                }
-              >
-                {getCardState(currentCard.fsrs)}
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Badge
+                  variant={
+                    getCardState(currentCard.fsrs) === 'New'
+                      ? 'info'
+                      : getCardState(currentCard.fsrs) === 'Learning' ||
+                          getCardState(currentCard.fsrs) === 'Relearning'
+                        ? 'warning'
+                        : 'success'
+                  }
+                >
+                  {getCardState(currentCard.fsrs)}
+                </Badge>
+                {isReverseCard && (
+                  <Badge variant="secondary" className="text-xs">
+                    EN → 中
+                  </Badge>
+                )}
+              </div>
               {currentCard.tags.length > 0 && (
                 <div className="flex gap-1">
-                  {currentCard.tags.slice(0, 3).map((tag) => (
+                  {currentCard.tags.filter(t => t !== 'reverse').slice(0, 3).map((tag) => (
                     <Badge key={tag} variant="outline" className="text-xs">
                       {tag}
                     </Badge>
@@ -329,7 +443,7 @@ export function StudyView({ deck, onBack, onComplete }: StudyViewProps) {
             <div className="text-center mb-8">
               <div className="flex items-center justify-center gap-2 mb-2">
                 <p className="text-xl font-medium whitespace-pre-wrap">
-                  {questionText}
+                  {currentCard.front}
                 </p>
                 <Button
                   variant="ghost"
@@ -362,7 +476,7 @@ export function StudyView({ deck, onBack, onComplete }: StudyViewProps) {
                 <div className="text-center">
                   <div className="flex items-center justify-center gap-2">
                     <p className="text-lg whitespace-pre-wrap text-muted-foreground">
-                      {answerText}
+                      {currentCard.back}
                     </p>
                     <Button
                       variant="ghost"
@@ -444,7 +558,7 @@ export function StudyView({ deck, onBack, onComplete }: StudyViewProps) {
 
       {/* Keyboard shortcuts hint */}
       <p className="text-center text-xs text-muted-foreground">
-        Keyboard: Space/Enter = show, 1-4 = rate, S = speak question, A = speak answer, R = reverse mode
+        Keyboard: Space/Enter = show, 1-4 = rate, S = speak question, A = speak answer
       </p>
     </div>
   )

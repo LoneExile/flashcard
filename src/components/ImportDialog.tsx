@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Upload, FileText, AlertCircle } from 'lucide-react'
+import { Upload, FileText, AlertCircle, ArrowLeftRight } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -26,6 +26,14 @@ export function ImportDialog({ open, onOpenChange, deckId }: ImportDialogProps) 
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [importedCount, setImportedCount] = useState<number | null>(null)
+  const [createReverse, setCreateReverse] = useState(() => {
+    return localStorage.getItem('import-create-reverse') === 'true'
+  })
+
+  const handleCreateReverseChange = (checked: boolean) => {
+    setCreateReverse(checked)
+    localStorage.setItem('import-create-reverse', String(checked))
+  }
 
   const parseTextInput = (text: string) => {
     const cards: Array<{ front: string; back: string; tags?: string[] }> = []
@@ -134,7 +142,7 @@ export function ImportDialog({ open, onOpenChange, deckId }: ImportDialogProps) 
         return
       }
 
-      const count = await importCards(deckId, cards)
+      const count = await importCards(deckId, cards, createReverse)
       setImportedCount(count)
       setTextInput('')
     } catch {
@@ -257,6 +265,22 @@ Question::Answer`}
         {importedCount !== null && (
           <div className="p-3 bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-200 rounded-md">
             Successfully imported {importedCount} cards!
+          </div>
+        )}
+
+        {importedCount === null && (
+          <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+            <input
+              type="checkbox"
+              id="createReverseImport"
+              checked={createReverse}
+              onChange={(e) => handleCreateReverseChange(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300"
+            />
+            <label htmlFor="createReverseImport" className="flex items-center gap-2 cursor-pointer text-sm">
+              <ArrowLeftRight className="h-4 w-4" />
+              <span>Also create reverse cards for bidirectional study</span>
+            </label>
           </div>
         )}
 

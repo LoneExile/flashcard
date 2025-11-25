@@ -1,6 +1,7 @@
 import type { Card as FSRSCard, State } from 'ts-fsrs'
 
 export type CardType = 'basic' | 'cloze' | 'multiple-choice'
+export type CardDirection = 'normal' | 'reverse'
 
 export interface Deck {
   id: string
@@ -23,6 +24,8 @@ export interface Card {
   id: string
   deckId: string
   type: CardType
+  direction: CardDirection // 'normal' = front→back, 'reverse' = back→front
+  pairId?: string // Links normal and reverse cards together
   front: string
   back: string
   audio?: string // Chinese characters or text for TTS (if different from front)
@@ -79,8 +82,10 @@ export interface AppSettings {
 export interface ImportedCard {
   front: string
   back: string
+  audio?: string
   tags?: string[]
   type?: CardType
+  createReverse?: boolean // Whether to also create a reverse card
 }
 
 export interface ExportData {

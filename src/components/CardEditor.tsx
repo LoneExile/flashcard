@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { X } from 'lucide-react'
+import { X, ArrowLeftRight } from 'lucide-react'
 import { useCards } from '@/hooks/useCards'
 import type { Card } from '@/types'
 
@@ -32,22 +32,33 @@ export function CardEditor({
   const { createCard, updateCard } = useCards(deckId)
   const [front, setFront] = useState('')
   const [back, setBack] = useState('')
+  const [audio, setAudio] = useState('')
   const [tagInput, setTagInput] = useState('')
   const [tags, setTags] = useState<string[]>([])
+  const [createReverse, setCreateReverse] = useState(() => {
+    return localStorage.getItem('card-create-reverse') === 'true'
+  })
   const [isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
     if (card) {
       setFront(card.front)
       setBack(card.back)
+      setAudio(card.audio || '')
       setTags(card.tags)
     } else {
       setFront('')
       setBack('')
+      setAudio('')
       setTags([])
     }
     setTagInput('')
   }, [card, open])
+
+  const handleCreateReverseChange = (checked: boolean) => {
+    setCreateReverse(checked)
+    localStorage.setItem('card-create-reverse', String(checked))
+  }
 
   const handleAddTag = () => {
     const trimmedTag = tagInput.trim().toLowerCase()
@@ -75,13 +86,18 @@ export function CardEditor({
     setIsLoading(true)
     try {
       if (card) {
-        await updateCard(card.id, { front, back, tags })
+        await updateCard(card.id, { front, back, audio: audio || undefined, tags })
       } else {
-        await createCard(deckId, front, back, 'basic', tags)
+        await createCard(deckId, front, back, {
+          tags,
+          audio: audio || undefined,
+          createReverse,
+        })
       }
       onOpenChange(false)
       setFront('')
       setBack('')
+      setAudio('')
       setTags([])
     } finally {
       setIsLoading(false)
@@ -125,6 +141,37 @@ export function CardEditor({
                 className="font-mono"
               />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="audio">Audio Text (Optional)</Label>
+              <Input
+                id="audio"
+                placeholder="Chinese characters for TTS (if different from front)"
+                value={audio}
+                onChange={(e) => setAudio(e.target.value)}
+                className="font-mono"
+              />
+              <p className="text-xs text-muted-foreground">
+                For Pinyin cards, enter Chinese characters here for correct pronunciation
+              </p>
+            </div>
+            {!card && (
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                <input
+                  type="checkbox"
+                  id="createReverse"
+                  checked={createReverse}
+                  onChange={(e) => handleCreateReverseChange(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+                <Label htmlFor="createReverse" className="flex items-center gap-2 cursor-pointer">
+                  <ArrowLeftRight className="h-4 w-4" />
+                  <span>Also create reverse card</span>
+                </Label>
+                <span className="text-xs text-muted-foreground ml-auto">
+                  Creates both directions for bidirectional study
+                </span>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="tags">Tags</Label>
               <div className="flex gap-2">

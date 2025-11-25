@@ -91,6 +91,7 @@ function App() {
     try {
       for (const deckData of seedDecks) {
         const deck = await createDeck(deckData.name, deckData.description)
+        // Create both normal and reverse cards for bidirectional study
         await importCards(
           deck.id,
           deckData.cards.map((c) => ({
@@ -98,7 +99,8 @@ function App() {
             back: c.back,
             audio: c.audio,
             tags: c.tags,
-          }))
+          })),
+          true  // createReverse = true
         )
       }
     } finally {

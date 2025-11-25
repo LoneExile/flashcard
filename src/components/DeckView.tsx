@@ -9,6 +9,7 @@ import {
   Trash2,
   Upload,
   Volume2,
+  ArrowLeftRight,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -44,7 +45,7 @@ interface DeckViewProps {
 }
 
 export function DeckView({ deck, onBack, onStudy }: DeckViewProps) {
-  const { cards, deleteCard, dueCards } = useCards(deck.id)
+  const { cards, deleteCard, dueCards, generateReverseCards } = useCards(deck.id)
   const { getDeckStats } = useDecks()
   const { speak } = useTTS()
   const [searchQuery, setSearchQuery] = useState('')
@@ -52,6 +53,7 @@ export function DeckView({ deck, onBack, onStudy }: DeckViewProps) {
   const [cardEditorOpen, setCardEditorOpen] = useState(false)
   const [importDialogOpen, setImportDialogOpen] = useState(false)
   const [editingCard, setEditingCard] = useState<CardType | null>(null)
+  const [generatingReverse, setGeneratingReverse] = useState(false)
 
   useEffect(() => {
     getDeckStats(deck.id).then(setStats)
@@ -80,6 +82,24 @@ export function DeckView({ deck, onBack, onStudy }: DeckViewProps) {
     setCardEditorOpen(true)
   }
 
+  // Count cards that can have reverse generated
+  const cardsWithoutReverse = cards.filter(card =>
+    (card.direction === 'normal' || !card.direction) && !card.pairId
+  ).length
+
+  const handleGenerateReverse = async () => {
+    if (cardsWithoutReverse === 0) return
+    setGeneratingReverse(true)
+    try {
+      const count = await generateReverseCards(deck.id)
+      if (count > 0) {
+        alert(`Generated ${count} reverse cards!`)
+      }
+    } finally {
+      setGeneratingReverse(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -95,6 +115,16 @@ export function DeckView({ deck, onBack, onStudy }: DeckViewProps) {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {cardsWithoutReverse > 0 && (
+            <Button
+              variant="outline"
+              onClick={handleGenerateReverse}
+              disabled={generatingReverse}
+            >
+              <ArrowLeftRight className="mr-2 h-4 w-4" />
+              {generatingReverse ? 'Generating...' : `Generate Reverse (${cardsWithoutReverse})`}
+            </Button>
+          )}
           <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
             <Upload className="mr-2 h-4 w-4" />
             Import
