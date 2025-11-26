@@ -25,7 +25,7 @@ import { getCardState, isDue } from '@/lib/fsrs'
 import type { Deck } from '@/types'
 
 interface StudyViewProps {
-  deck: Deck
+  deck: Deck | null  // null = study all decks
   onBack: () => void
   onComplete: () => void
 }
@@ -43,7 +43,10 @@ export function StudyView({ deck, onBack, onComplete }: StudyViewProps) {
     localStorage.setItem('study-direction-filter', filter)
   }
 
-  const { dueCards } = useCards(deck.id)
+  const deckId = deck?.id ?? null
+  const deckName = deck?.name ?? 'All Decks'
+
+  const { dueCards } = useCards(deckId ?? undefined)
 
   const {
     isStudying,
@@ -57,7 +60,7 @@ export function StudyView({ deck, onBack, onComplete }: StudyViewProps) {
     answerCard,
     endSession,
     getSchedulingInfo,
-  } = useStudySession(deck.id)
+  } = useStudySession(deckId)
 
   const {
     speak,
@@ -256,7 +259,7 @@ export function StudyView({ deck, onBack, onComplete }: StudyViewProps) {
             </div>
             <div className="flex justify-center gap-4">
               <Button variant="outline" onClick={onBack}>
-                Back to Deck
+                {deck ? 'Back to Deck' : 'Back to Decks'}
               </Button>
               {filteredDueCount > 0 && (
                 <Button onClick={() => startSession(filteredDueCards)}>
@@ -285,7 +288,7 @@ export function StudyView({ deck, onBack, onComplete }: StudyViewProps) {
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back
           </Button>
-          <h2 className="text-xl font-bold">{deck.name}</h2>
+          <h2 className="text-xl font-bold">{deckName}</h2>
           <div />
         </div>
 
@@ -371,7 +374,7 @@ export function StudyView({ deck, onBack, onComplete }: StudyViewProps) {
 
         <Button onClick={onBack}>
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Deck
+          {deck ? 'Back to Deck' : 'Back to Decks'}
         </Button>
       </div>
     )

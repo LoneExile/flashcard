@@ -67,13 +67,20 @@ function App() {
     setCurrentView('study')
   }
 
+  const handleStudyAllDecks = () => {
+    setSelectedDeck(null)
+    setCurrentView('study')
+  }
+
   const handleBack = () => {
     setCurrentView('decks')
     setSelectedDeck(null)
   }
 
   const handleStudyComplete = () => {
-    setCurrentView('deck-view')
+    // If studying all decks (no selected deck), go back to decks list
+    // Otherwise go to deck view
+    setCurrentView(selectedDeck ? 'deck-view' : 'decks')
   }
 
   const handleCreateDeck = () => {
@@ -145,7 +152,7 @@ function App() {
 
         {/* Main Content */}
         <main className="container mx-auto px-4 py-6">
-          {currentView === 'study' && selectedDeck ? (
+          {currentView === 'study' ? (
             <StudyView
               deck={selectedDeck}
               onBack={handleBack}
@@ -181,6 +188,7 @@ function App() {
                 <DeckList
                   onSelectDeck={handleSelectDeck}
                   onStudyDeck={handleStudyDeck}
+                  onStudyAllDecks={handleStudyAllDecks}
                   onCreateDeck={handleCreateDeck}
                   onEditDeck={handleEditDeck}
                 />

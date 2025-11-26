@@ -20,8 +20,9 @@ interface StudyState {
   }
 }
 
-export function useStudySession(deckId: string) {
-  const { dueCards, reviewCard } = useCards(deckId)
+export function useStudySession(deckId: string | null) {
+  // Pass undefined to useCards when deckId is null (all decks mode)
+  const { dueCards, reviewCard } = useCards(deckId ?? undefined)
   const [session, setSession] = useState<StudySession | null>(null)
   const [studyQueue, setStudyQueue] = useState<Card[]>([])
   const [state, setState] = useState<StudyState>({
@@ -52,7 +53,7 @@ export function useStudySession(deckId: string) {
 
       const newSession: StudySession = {
         id: uuidv4(),
-        deckId,
+        deckId: deckId ?? 'all-decks',  // Use 'all-decks' when studying all decks
         startTime: new Date(),
         endTime: null,
         cardsStudied: 0,

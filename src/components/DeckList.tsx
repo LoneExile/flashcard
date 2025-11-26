@@ -30,6 +30,7 @@ import type { Deck, DeckStats } from '@/types'
 interface DeckListProps {
   onSelectDeck: (deck: Deck) => void
   onStudyDeck: (deck: Deck) => void
+  onStudyAllDecks: () => void
   onCreateDeck: () => void
   onEditDeck: (deck: Deck) => void
 }
@@ -37,6 +38,7 @@ interface DeckListProps {
 export function DeckList({
   onSelectDeck,
   onStudyDeck,
+  onStudyAllDecks,
   onCreateDeck,
   onEditDeck,
 }: DeckListProps) {
@@ -84,14 +86,25 @@ export function DeckList({
     )
   }
 
+  // Calculate total due cards across all decks
+  const totalDueCards = Object.values(stats).reduce((sum, s) => sum + s.dueCards, 0)
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">Your Decks</h2>
-        <Button onClick={onCreateDeck}>
-          <Plus className="mr-2 h-4 w-4" />
-          New Deck
-        </Button>
+        <div className="flex gap-2">
+          {totalDueCards > 0 && (
+            <Button variant="secondary" onClick={onStudyAllDecks}>
+              <Play className="mr-2 h-4 w-4" />
+              Study All ({totalDueCards})
+            </Button>
+          )}
+          <Button onClick={onCreateDeck}>
+            <Plus className="mr-2 h-4 w-4" />
+            New Deck
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
