@@ -4,7 +4,7 @@ API Routes for Flashcard App
 CRUD operations for decks, cards, and review logs.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -190,7 +190,7 @@ def get_card(card_id: str, db: Session = Depends(get_db)):
 @router.get("/cards/due")
 def get_due_cards(deck_id: Optional[str] = Query(None), db: Session = Depends(get_db)):
     """Get cards that are due for review"""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     query = db.query(Card).filter(Card.fsrs_due <= now)
     if deck_id:
         query = query.filter(Card.deck_id == deck_id)
@@ -205,7 +205,7 @@ def parse_datetime(dt_str: Optional[str]) -> Optional[datetime]:
     try:
         return datetime.fromisoformat(dt_str.replace('Z', '+00:00'))
     except ValueError:
-        return datetime.utcnow()
+        return datetime.now(timezone.utc)
 
 
 @router.post("/cards")
@@ -335,7 +335,6 @@ def create_study_session(session: StudySessionCreate, db: Session = Depends(get_
         start_time=parse_datetime(session.startTime),
         end_time=parse_datetime(session.endTime),
         cards_studied=session.cardsStudied,
-        correct_count=session.correctCount,
         again_count=session.againCount,
         hard_count=session.hardCount,
         good_count=session.goodCount,
@@ -356,7 +355,6 @@ def update_study_session(session_id: str, session: StudySessionCreate, db: Sessi
 
     db_session.end_time = parse_datetime(session.endTime)
     db_session.cards_studied = session.cardsStudied
-    db_session.correct_count = session.correctCount
     db_session.again_count = session.againCount
     db_session.hard_count = session.hardCount
     db_session.good_count = session.goodCount
@@ -444,7 +442,6 @@ def sync_all_data(data: SyncRequest, db: Session = Depends(get_db)):
                 start_time=parse_datetime(session.startTime),
                 end_time=parse_datetime(session.endTime),
                 cards_studied=session.cardsStudied,
-                correct_count=session.correctCount,
                 again_count=session.againCount,
                 hard_count=session.hardCount,
                 good_count=session.goodCount,
@@ -490,7 +487,7 @@ def get_all_data(db: Session = Depends(get_db)):
 @router.get("/stats/deck/{deck_id}")
 def get_deck_stats(deck_id: str, db: Session = Depends(get_db)):
     """Get statistics for a deck"""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     total_cards = db.query(Card).filter(Card.deck_id == deck_id).count()
     due_cards = db.query(Card).filter(
