@@ -113,20 +113,20 @@ export function DeckList({
           return (
             <Card
               key={deck.id}
-              className="cursor-pointer hover:shadow-md transition-shadow"
+              className="cursor-pointer hover:shadow-md transition-shadow flex flex-col h-full"
             >
-              <CardHeader className="pb-2">
+              <CardHeader className="pb-2 flex-shrink-0">
                 <div className="flex items-start justify-between">
                   <div
-                    className="flex-1 cursor-pointer"
+                    className="flex-1 cursor-pointer min-w-0"
                     onClick={() => onSelectDeck(deck)}
                   >
                     <CardTitle className="flex items-center gap-2">
-                      <FolderOpen className="h-5 w-5" />
-                      {deck.name}
+                      <FolderOpen className="h-5 w-5 flex-shrink-0" />
+                      <span className="truncate">{deck.name}</span>
                     </CardTitle>
                     {deck.description && (
-                      <CardDescription className="mt-1">
+                      <CardDescription className="mt-1 line-clamp-2">
                         {deck.description}
                       </CardDescription>
                     )}
@@ -158,7 +158,7 @@ export function DeckList({
                   </DropdownMenu>
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="mt-auto">
                 <div className="flex flex-wrap gap-2 mb-3">
                   {deckStats && (
                     <>
