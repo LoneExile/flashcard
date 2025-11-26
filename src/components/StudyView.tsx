@@ -444,6 +444,12 @@ export function StudyView({ deck, onBack, onComplete }: StudyViewProps) {
           <CardContent className="flex-1 flex flex-col justify-center">
             {/* Question */}
             <div className="text-center mb-8">
+              {/* Show Chinese characters above pinyin for normal cards */}
+              {!isReverseCard && currentCard.audio && (
+                <p className="text-3xl font-medium mb-2 text-primary">
+                  {currentCard.audio}
+                </p>
+              )}
               <div className="flex items-center justify-center gap-2 mb-2">
                 <p className="text-xl font-medium whitespace-pre-wrap">
                   {currentCard.front}
@@ -477,6 +483,12 @@ export function StudyView({ deck, onBack, onComplete }: StudyViewProps) {
               <>
                 <Separator className="my-6" />
                 <div className="text-center">
+                  {/* Show Chinese characters above pinyin for reverse cards */}
+                  {isReverseCard && currentCard.audio && (
+                    <p className="text-2xl font-medium mb-2 text-primary">
+                      {currentCard.audio}
+                    </p>
+                  )}
                   <div className="flex items-center justify-center gap-2">
                     <p className="text-lg whitespace-pre-wrap text-muted-foreground">
                       {currentCard.back}
