@@ -2,6 +2,9 @@
 
 A modern, full-stack spaced repetition flashcard application designed for language learning with Chinese/Mandarin support. Built with an offline-first architecture featuring FSRS algorithm, neural TTS, and comprehensive user management.
 
+<img width="1280" height="800" alt="image" src="https://github.com/user-attachments/assets/180e51bf-0d7c-4c89-91f9-03ef9dff2a73" />
+
+
 ## Overview
 
 This application combines cutting-edge spaced repetition learning with powerful language learning features. It provides an offline-first experience with automatic cloud synchronization, making it perfect for consistent language study anywhere.
