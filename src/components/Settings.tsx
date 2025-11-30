@@ -33,6 +33,8 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { Separator } from '@/components/ui/separator'
+import { Slider } from '@/components/ui/slider'
+import { Switch } from '@/components/ui/switch'
 import { db, clearAllData } from '@/db'
 import type { AppSettings, ExportData } from '@/types'
 
@@ -398,15 +400,13 @@ export function Settings() {
                 <Label htmlFor="voiceSpeed">Speed</Label>
                 <span className="text-sm text-muted-foreground">{voiceSpeed.toFixed(1)}x</span>
               </div>
-              <input
+              <Slider
                 id="voiceSpeed"
-                type="range"
-                min="0.5"
-                max="2"
-                step="0.1"
-                value={voiceSpeed}
-                onChange={(e) => handleSpeedChange(parseFloat(e.target.value))}
-                className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+                min={0.5}
+                max={2}
+                step={0.1}
+                value={[voiceSpeed]}
+                onValueChange={(value) => handleSpeedChange(value[0])}
               />
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>0.5x (Slow)</span>
@@ -420,15 +420,13 @@ export function Settings() {
                 <Label htmlFor="voicePitch">Pitch</Label>
                 <span className="text-sm text-muted-foreground">{voicePitch.toFixed(1)}</span>
               </div>
-              <input
+              <Slider
                 id="voicePitch"
-                type="range"
-                min="0.5"
-                max="2"
-                step="0.1"
-                value={voicePitch}
-                onChange={(e) => handlePitchChange(parseFloat(e.target.value))}
-                className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+                min={0.5}
+                max={2}
+                step={0.1}
+                value={[voicePitch]}
+                onValueChange={(value) => handlePitchChange(value[0])}
               />
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>0.5 (Low)</span>
@@ -485,21 +483,11 @@ export function Settings() {
                 Automatically sync data when changes are made
               </p>
             </div>
-            <button
+            <Switch
               id="autoSync"
-              role="switch"
-              aria-checked={autoSync}
-              onClick={() => updateAutoSync(!autoSync)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
-                autoSync ? 'bg-primary' : 'bg-muted'
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-background shadow-lg transition-transform ${
-                  autoSync ? 'translate-x-6' : 'translate-x-1'
-                }`}
-              />
-            </button>
+              checked={autoSync}
+              onCheckedChange={updateAutoSync}
+            />
           </div>
 
           <Separator />

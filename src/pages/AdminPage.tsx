@@ -11,6 +11,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { Checkbox } from '@/components/ui/checkbox'
 import type { User } from '@/types'
 import * as api from '@/lib/api'
 
@@ -203,79 +212,77 @@ export function AdminPage({ onBack }: AdminPageProps) {
             <div className="p-8 text-center text-muted-foreground">Loading...</div>
           ) : (
             <>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b bg-muted/50">
-                      <th className="text-left p-3 font-medium">User</th>
-                      <th className="text-left p-3 font-medium">Email</th>
-                      <th className="text-left p-3 font-medium">Status</th>
-                      <th className="text-left p-3 font-medium">Role</th>
-                      <th className="text-left p-3 font-medium">Provider</th>
-                      <th className="text-right p-3 font-medium">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {users.map((user) => (
-                      <tr key={user.id} className="border-b hover:bg-muted/30">
-                        <td className="p-3">
-                          <div className="font-medium">{user.username}</div>
-                        </td>
-                        <td className="p-3 text-muted-foreground">{user.email}</td>
-                        <td className="p-3">
-                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                            user.isActive
-                              ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                              : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                          }`}>
-                            {user.isActive ? 'Active' : 'Inactive'}
-                          </span>
-                        </td>
-                        <td className="p-3">
-                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                            user.isAdmin
-                              ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
-                              : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200'
-                          }`}>
-                            {user.isAdmin ? 'Admin' : 'User'}
-                          </span>
-                        </td>
-                        <td className="p-3 text-muted-foreground">
-                          {user.oauthProvider || 'Password'}
-                        </td>
-                        <td className="p-3 text-right">
-                          <div className="flex gap-2 justify-end">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleToggleActive(user)}
-                              disabled={user.id === currentUser?.id}
-                            >
-                              {user.isActive ? 'Deactivate' : 'Activate'}
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleToggleAdmin(user)}
-                              disabled={user.id === currentUser?.id}
-                            >
-                              {user.isAdmin ? 'Remove Admin' : 'Make Admin'}
-                            </Button>
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              onClick={() => setDeletingUser(user)}
-                              disabled={user.id === currentUser?.id}
-                            >
-                              Delete
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>User</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Provider</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {users.map((user) => (
+                    <TableRow key={user.id}>
+                      <TableCell>
+                        <div className="font-medium">{user.username}</div>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{user.email}</TableCell>
+                      <TableCell>
+                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                          user.isActive
+                            ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                            : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                        }`}>
+                          {user.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                          user.isAdmin
+                            ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
+                            : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200'
+                        }`}>
+                          {user.isAdmin ? 'Admin' : 'User'}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {user.oauthProvider || 'Password'}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex gap-2 justify-end">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleToggleActive(user)}
+                            disabled={user.id === currentUser?.id}
+                          >
+                            {user.isActive ? 'Deactivate' : 'Activate'}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleToggleAdmin(user)}
+                            disabled={user.id === currentUser?.id}
+                          >
+                            {user.isAdmin ? 'Remove Admin' : 'Make Admin'}
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => setDeletingUser(user)}
+                            disabled={user.id === currentUser?.id}
+                          >
+                            Delete
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
 
               {/* Pagination */}
               {totalPages > 1 && (
@@ -351,12 +358,10 @@ export function AdminPage({ onBack }: AdminPageProps) {
               />
             </div>
             <div className="flex items-center gap-2">
-              <input
+              <Checkbox
                 id="newIsAdmin"
-                type="checkbox"
                 checked={newUserIsAdmin}
-                onChange={(e) => setNewUserIsAdmin(e.target.checked)}
-                className="rounded"
+                onCheckedChange={(checked) => setNewUserIsAdmin(checked === true)}
               />
               <Label htmlFor="newIsAdmin">Admin privileges</Label>
             </div>
