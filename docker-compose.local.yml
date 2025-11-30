@@ -1,3 +1,6 @@
+# Local development - builds images from source
+# Usage: docker compose -f docker-compose.local.yml up --build
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -5,8 +8,8 @@ services:
       POSTGRES_USER: flashcard
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-flashcard_secret}
       POSTGRES_DB: flashcard
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
+    # volumes:
+    #   - postgres-data:/var/lib/postgresql/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U flashcard"]
@@ -16,7 +19,9 @@ services:
       start_period: 10s
 
   frontend:
-    image: ghcr.io/loneexile/flashcard-frontend:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
     ports:
       - "3100:80"
     depends_on:
@@ -24,7 +29,11 @@ services:
     restart: unless-stopped
 
   backend:
-    image: ghcr.io/loneexile/flashcard-backend:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    # volumes:
+    #   - tts-cache:/tmp/edge_tts_cache
     environment:
       - DATABASE_URL=postgresql://flashcard:${POSTGRES_PASSWORD:-flashcard_secret}@postgres:5432/flashcard
       - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-in-production}
@@ -51,3 +60,4 @@ services:
 
 volumes:
   postgres-data:
+  tts-cache:

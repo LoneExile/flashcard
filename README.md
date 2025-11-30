@@ -61,6 +61,8 @@ This application combines cutting-edge spaced repetition learning with powerful 
 - **Docker** - Containerization
 - **Docker Compose** - Multi-container orchestration
 - **Nginx** - Frontend web server and reverse proxy
+- **GitHub Actions** - CI/CD for building and releasing images
+- **GHCR** - GitHub Container Registry for image hosting
 
 ## Getting Started
 
@@ -92,7 +94,11 @@ This application combines cutting-edge spaced repetition learning with powerful 
 
 3. **Start the application**
    ```bash
+   # Using pre-built images from GHCR (recommended)
    docker compose up -d
+
+   # Or build from source for local development
+   docker compose -f docker-compose.local.yml up --build
    ```
 
 4. **Access the application**
@@ -445,7 +451,11 @@ flashcard-app/
 │   ├── admin.py              # Admin routes
 │   ├── middleware.py         # Auth middleware
 │   └── requirements.txt      # Python dependencies
-├── docker-compose.yml        # Multi-container orchestration
+├── .github/
+│   └── workflows/
+│       └── release.yml       # CI/CD for GHCR releases
+├── docker-compose.yml        # Production (uses GHCR images)
+├── docker-compose.local.yml  # Development (builds from source)
 ├── Dockerfile.frontend       # Frontend container
 ├── Dockerfile.backend        # Backend container
 ├── nginx.conf                # Nginx configuration
@@ -454,6 +464,23 @@ flashcard-app/
 ```
 
 ## Deployment
+
+### Docker Images
+
+Pre-built images are available on GitHub Container Registry:
+
+```bash
+docker pull ghcr.io/loneexile/flashcard-frontend:latest
+docker pull ghcr.io/loneexile/flashcard-backend:latest
+```
+
+**Available Tags:**
+- `latest` - Latest stable release
+- `x.y.z` - Specific version (e.g., `1.0.0`)
+- `x.y` - Minor version (e.g., `1.0`)
+- `x` - Major version (e.g., `1`)
+
+Images are automatically built and pushed via GitHub Actions when a new release is published.
 
 ### Production Considerations
 
