@@ -91,18 +91,21 @@ export function DeckList({
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
         <h2 className="text-2xl font-bold">Your Decks</h2>
         <div className="flex gap-2">
           {totalDueCards > 0 && (
-            <Button variant="secondary" onClick={onStudyAllDecks}>
+            <Button variant="secondary" onClick={onStudyAllDecks} className="flex-1 sm:flex-none">
               <Play className="mr-2 h-4 w-4" />
-              Study All ({totalDueCards})
+              <span className="hidden xs:inline">Study All</span>
+              <span className="xs:hidden">Study</span>
+              <span className="ml-1">({totalDueCards})</span>
             </Button>
           )}
-          <Button onClick={onCreateDeck}>
+          <Button onClick={onCreateDeck} className="flex-1 sm:flex-none">
             <Plus className="mr-2 h-4 w-4" />
-            New Deck
+            <span className="hidden sm:inline">New Deck</span>
+            <span className="sm:hidden">New</span>
           </Button>
         </div>
       </div>

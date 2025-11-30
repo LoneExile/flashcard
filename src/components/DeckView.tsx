@@ -102,35 +102,39 @@ export function DeckView({ deck, onBack, onStudy }: DeckViewProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={onBack}>
+      <div className="space-y-4">
+        {/* Header row with back button and title */}
+        <div className="flex items-start gap-4">
+          <Button variant="ghost" size="icon" onClick={onBack} className="flex-shrink-0 mt-1">
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <div>
-            <h2 className="text-2xl font-bold">{deck.name}</h2>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-xl sm:text-2xl font-bold">{deck.name}</h2>
             {deck.description && (
-              <p className="text-muted-foreground">{deck.description}</p>
+              <p className="text-muted-foreground text-sm sm:text-base">{deck.description}</p>
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        {/* Action buttons - stack on mobile */}
+        <div className="flex flex-wrap gap-2">
           {cardsWithoutReverse > 0 && (
             <Button
               variant="outline"
+              size="sm"
               onClick={handleGenerateReverse}
               disabled={generatingReverse}
+              className="hidden sm:flex"
             >
               <ArrowLeftRight className="mr-2 h-4 w-4" />
               {generatingReverse ? 'Generating...' : `Generate Reverse (${cardsWithoutReverse})`}
             </Button>
           )}
-          <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
+          <Button variant="outline" size="sm" onClick={() => setImportDialogOpen(true)}>
             <Upload className="mr-2 h-4 w-4" />
             Import
           </Button>
           {dueCards.length > 0 && (
-            <Button onClick={onStudy}>
+            <Button size="sm" onClick={onStudy}>
               <Play className="mr-2 h-4 w-4" />
               Study ({dueCards.length} due)
             </Button>
