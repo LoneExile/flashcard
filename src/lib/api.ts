@@ -1,10 +1,12 @@
 /**
  * API Service for Flashcard App Backend
  *
- * Communicates with the SQLite backend for syncing data.
+ * Communicates with the PostgreSQL backend for syncing data and authentication.
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+import type { User, AuthConfig, LoginCredentials, RegisterCredentials } from '@/types'
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || ''
 
 interface SyncData {
   decks: any[]
@@ -13,6 +15,179 @@ interface SyncData {
   studySessions: any[]
 }
 
+// Helper for API requests with credentials
+async function apiRequest<T>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    ...options,
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Request failed' }))
+    throw new Error(error.detail || `HTTP ${response.status}`)
+  }
+
+  return response.json()
+}
+
+// ============== Auth API ==============
+
+/**
+ * Get authentication configuration
+ */
+export async function getAuthConfig(): Promise<AuthConfig> {
+  return apiRequest<AuthConfig>('/auth/config')
+}
+
+/**
+ * Login with email and password
+ */
+export async function login(credentials: LoginCredentials): Promise<User> {
+  return apiRequest<User>('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify(credentials),
+  })
+}
+
+/**
+ * Register a new user
+ */
+export async function register(credentials: RegisterCredentials): Promise<User> {
+  return apiRequest<User>('/auth/register', {
+    method: 'POST',
+    body: JSON.stringify(credentials),
+  })
+}
+
+/**
+ * Logout current user
+ */
+export async function logout(): Promise<void> {
+  await apiRequest<{ message: string }>('/auth/logout', {
+    method: 'POST',
+  })
+}
+
+/**
+ * Get current user info
+ */
+export async function getCurrentUser(): Promise<User> {
+  return apiRequest<User>('/auth/me')
+}
+
+/**
+ * Refresh authentication token
+ */
+export async function refreshToken(): Promise<User> {
+  return apiRequest<User>('/auth/refresh', {
+    method: 'POST',
+  })
+}
+
+// ============== Admin API ==============
+
+export interface UserListResponse {
+  users: User[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export interface UserUpdateRequest {
+  isActive?: boolean
+  isAdmin?: boolean
+  password?: string
+}
+
+export interface UserCreateRequest {
+  email: string
+  username: string
+  password: string
+  isAdmin?: boolean
+}
+
+export interface SystemStats {
+  totalUsers: number
+  activeUsers: number
+  totalDecks: number
+  totalCards: number
+  totalStudySessions: number
+  totalReviews: number
+}
+
+/**
+ * List all users (admin only)
+ */
+export async function listUsers(params?: {
+  page?: number
+  pageSize?: number
+  search?: string
+  isActive?: boolean
+  isAdmin?: boolean
+}): Promise<UserListResponse> {
+  const searchParams = new URLSearchParams()
+  if (params?.page) searchParams.set('page', params.page.toString())
+  if (params?.pageSize) searchParams.set('page_size', params.pageSize.toString())
+  if (params?.search) searchParams.set('search', params.search)
+  if (params?.isActive !== undefined) searchParams.set('is_active', params.isActive.toString())
+  if (params?.isAdmin !== undefined) searchParams.set('is_admin', params.isAdmin.toString())
+
+  const query = searchParams.toString()
+  return apiRequest<UserListResponse>(`/admin/users${query ? `?${query}` : ''}`)
+}
+
+/**
+ * Get user details (admin only)
+ */
+export async function getUser(userId: string): Promise<User & { stats: { deckCount: number; cardCount: number; sessionCount: number } }> {
+  return apiRequest(`/admin/users/${userId}`)
+}
+
+/**
+ * Update user (admin only)
+ */
+export async function updateUser(userId: string, data: UserUpdateRequest): Promise<User> {
+  return apiRequest<User>(`/admin/users/${userId}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+}
+
+/**
+ * Create user (admin only)
+ */
+export async function createUser(data: UserCreateRequest): Promise<User> {
+  return apiRequest<User>('/admin/users', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+/**
+ * Delete user (admin only)
+ */
+export async function deleteUser(userId: string): Promise<{ message: string }> {
+  return apiRequest<{ message: string }>(`/admin/users/${userId}`, {
+    method: 'DELETE',
+  })
+}
+
+/**
+ * Get system statistics (admin only)
+ */
+export async function getSystemStats(): Promise<SystemStats> {
+  return apiRequest<SystemStats>('/admin/stats')
+}
+
+// ============== Data Sync API ==============
+
 /**
  * Check if the backend server is available
  */
@@ -20,6 +195,7 @@ export async function checkServerStatus(): Promise<boolean> {
   try {
     const response = await fetch(`${API_BASE_URL}/health`, {
       method: 'GET',
+      credentials: 'include',
       signal: AbortSignal.timeout(3000),
     })
     return response.ok
@@ -46,6 +222,8 @@ export async function syncToServer(data: SyncData): Promise<{ success: boolean; 
         id: c.id,
         deckId: c.deckId,
         type: c.type || 'basic',
+        direction: c.direction || 'normal',
+        pairId: c.pairId || null,
         front: c.front,
         back: c.back,
         audio: c.audio || null,
@@ -93,6 +271,7 @@ export async function syncToServer(data: SyncData): Promise<{ success: boolean; 
 
     const response = await fetch(`${API_BASE_URL}/api/sync`, {
       method: 'POST',
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
       },
@@ -124,6 +303,7 @@ export async function syncFromServer(): Promise<{ success: boolean; data?: SyncD
   try {
     const response = await fetch(`${API_BASE_URL}/api/sync`, {
       method: 'GET',
+      credentials: 'include',
     })
 
     if (!response.ok) {
@@ -143,6 +323,7 @@ export async function syncFromServer(): Promise<{ success: boolean; data?: SyncD
       })),
       cards: data.cards.map((c: any) => ({
         ...c,
+        direction: c.direction || 'normal',
         createdAt: new Date(c.createdAt),
         updatedAt: new Date(c.updatedAt),
         fsrs: {

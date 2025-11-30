@@ -1,4 +1,20 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: flashcard
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-flashcard_secret}
+      POSTGRES_DB: flashcard
+    # volumes:
+    #   - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flashcard"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   frontend:
     build:
       context: .
@@ -14,10 +30,23 @@ services:
       context: .
       dockerfile: Dockerfile.backend
     # volumes:
-    #   - flashcard-data:/data
     #   - tts-cache:/tmp/edge_tts_cache
     environment:
-      - DATABASE_PATH=/data/flashcards.db
+      - DATABASE_URL=postgresql://flashcard:${POSTGRES_PASSWORD:-flashcard_secret}@postgres:5432/flashcard
+      - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-in-production}
+      - FRONTEND_URL=${FRONTEND_URL:-http://10.0.10.180:3100}
+      - REGISTRATION_ENABLED=${REGISTRATION_ENABLED:-true}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-Hello@Apinant.dev}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
+      - OAUTH_ENABLED=${OAUTH_ENABLED:-false}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID:-}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET:-}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - SECURE_COOKIES=${SECURE_COOKIES:-false}
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -27,5 +56,5 @@ services:
       start_period: 10s
 
 volumes:
-  flashcard-data:
+  postgres-data:
   tts-cache:

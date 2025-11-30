@@ -2,12 +2,13 @@
 Flashcard App Backend Server
 
 Features:
+- User authentication with email/password and OAuth (GitHub, Google)
 - Text-to-Speech using Microsoft Edge TTS
-- SQLite database for persistent storage
+- PostgreSQL database for persistent storage
 - REST API for decks, cards, and study data
 
 Requirements:
-    pip install fastapi uvicorn edge-tts sqlalchemy
+    pip install -r requirements.txt
 
 Usage:
     uvicorn main:app --host 0.0.0.0 --port 8000 --reload
@@ -15,7 +16,10 @@ Usage:
 
 import asyncio
 import hashlib
+import logging
+import os
 import tempfile
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
@@ -23,34 +27,114 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from starlette.middleware.sessions import SessionMiddleware
 
-from database import init_db
+from database import init_db, SessionLocal, User, generate_uuid
 from api import router as api_router
+from auth import router as auth_router
+from admin import router as admin_router
+from oauth import router as oauth_router
+from middleware import get_password_hash
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Cache directory for generated audio
 CACHE_DIR = Path(tempfile.gettempdir()) / "edge_tts_cache"
 CACHE_DIR.mkdir(exist_ok=True)
 
-# Initialize database
-init_db()
+# Configuration
+SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+
+
+def bootstrap_admin():
+    """Create admin user on startup if configured"""
+    admin_email = os.getenv("ADMIN_EMAIL")
+    admin_password = os.getenv("ADMIN_PASSWORD")
+
+    if not admin_email or not admin_password:
+        logger.info("ADMIN_EMAIL or ADMIN_PASSWORD not set, skipping admin bootstrap")
+        return
+
+    db = SessionLocal()
+    try:
+        # Check if admin already exists
+        existing_admin = db.query(User).filter(User.email == admin_email).first()
+        if existing_admin:
+            logger.info(f"Admin user {admin_email} already exists")
+            # Ensure they are admin
+            if not existing_admin.is_admin:
+                existing_admin.is_admin = True
+                db.commit()
+                logger.info(f"Updated {admin_email} to admin status")
+            return
+
+        # Create admin user
+        admin_user = User(
+            id=generate_uuid(),
+            email=admin_email,
+            username=admin_email.split("@")[0].lower(),
+            password_hash=get_password_hash(admin_password),
+            is_active=True,
+            is_admin=True,
+        )
+        db.add(admin_user)
+        db.commit()
+        logger.info(f"Created admin user: {admin_email}")
+    except Exception as e:
+        logger.error(f"Failed to bootstrap admin: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan events"""
+    # Startup
+    logger.info("Starting Flashcard App Backend...")
+    init_db()
+    bootstrap_admin()
+    logger.info("Database initialized")
+    yield
+    # Shutdown
+    logger.info("Shutting down Flashcard App Backend...")
+
 
 app = FastAPI(
     title="Flashcard App API",
-    description="Backend API for Flashcard App with TTS and SQLite storage",
-    version="1.0.0"
+    description="Backend API for Flashcard App with authentication, TTS, and PostgreSQL storage",
+    version="2.0.0",
+    lifespan=lifespan,
 )
 
-# Include API routes
-app.include_router(api_router)
+# Add session middleware for OAuth
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=SECRET_KEY,
+    max_age=3600,  # 1 hour session
+)
 
 # Enable CORS for frontend access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:3100",
+        FRONTEND_URL,
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include routers
+app.include_router(auth_router)
+app.include_router(oauth_router)
+app.include_router(admin_router)
+app.include_router(api_router)
 
 # Available Chinese voices (Microsoft Edge)
 CHINESE_VOICES = {
@@ -102,8 +186,8 @@ async def root():
     """Health check endpoint"""
     return {
         "status": "ok",
-        "service": "Edge-TTS API",
-        "version": "1.0.0"
+        "service": "Flashcard App API",
+        "version": "2.0.0"
     }
 
 

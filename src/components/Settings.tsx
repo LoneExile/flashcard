@@ -50,12 +50,14 @@ export function Settings() {
   const [serverOnline, setServerOnline] = useState<boolean | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
+  const [autoSync, setAutoSync] = useState(true)
 
   const { speak, isPlaying, isLoading: ttsLoading } = useTTS()
 
   useEffect(() => {
     if (settings) {
       setDailyGoal(settings.dailyGoal)
+      setAutoSync(settings.autoSync ?? true)
     }
   }, [settings])
 
@@ -84,6 +86,11 @@ export function Settings() {
   const updateDailyGoal = async (goal: number) => {
     setDailyGoal(goal)
     await db.settings.update('app-settings', { dailyGoal: goal })
+  }
+
+  const updateAutoSync = async (enabled: boolean) => {
+    setAutoSync(enabled)
+    await db.settings.update('app-settings', { autoSync: enabled })
   }
 
   const handleVoiceChange = (voice: VoiceKey) => {
@@ -466,10 +473,37 @@ export function Settings() {
             Backend Sync
           </CardTitle>
           <CardDescription>
-            Sync your data with the SQLite backend server
+            Sync your data with the PostgreSQL backend server
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Auto Sync Toggle */}
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="autoSync">Auto Sync</Label>
+              <p className="text-xs text-muted-foreground">
+                Automatically sync data when changes are made
+              </p>
+            </div>
+            <button
+              id="autoSync"
+              role="switch"
+              aria-checked={autoSync}
+              onClick={() => updateAutoSync(!autoSync)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                autoSync ? 'bg-primary' : 'bg-muted'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-background shadow-lg transition-transform ${
+                  autoSync ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+
+          <Separator />
+
           <div className="flex items-center gap-2 text-sm">
             <span>Server:</span>
             <code className="bg-muted px-2 py-1 rounded text-xs">{getApiUrl()}</code>

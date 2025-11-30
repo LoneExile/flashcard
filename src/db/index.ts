@@ -32,6 +32,7 @@ export async function initializeDB() {
       dailyGoal: 20,
       soundEnabled: true,
       hapticEnabled: true,
+      autoSync: true,
     })
   }
 }

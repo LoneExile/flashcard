@@ -1,5 +1,34 @@
 import type { Card as FSRSCard, State } from 'ts-fsrs'
 
+// User and Auth types
+export interface User {
+  id: string
+  email: string
+  username: string
+  isActive: boolean
+  isAdmin: boolean
+  oauthProvider?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AuthConfig {
+  registrationEnabled: boolean
+  oauthEnabled: boolean
+  oauthProviders: string[]
+}
+
+export interface LoginCredentials {
+  email: string
+  password: string
+}
+
+export interface RegisterCredentials {
+  email: string
+  username: string
+  password: string
+}
+
 export type CardType = 'basic' | 'cloze' | 'multiple-choice'
 export type CardDirection = 'normal' | 'reverse'
 
@@ -77,6 +106,7 @@ export interface AppSettings {
   dailyGoal: number
   soundEnabled: boolean
   hapticEnabled: boolean
+  autoSync: boolean
 }
 
 export interface ImportedCard {

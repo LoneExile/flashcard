@@ -2,6 +2,7 @@
 API Routes for Flashcard App
 
 CRUD operations for decks, cards, and review logs.
+All endpoints require authentication and are user-scoped.
 """
 
 from datetime import datetime, timezone
@@ -10,7 +11,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
-from database import get_db, Deck, Card, ReviewLog, StudySession
+from database import get_db, Deck, Card, ReviewLog, StudySession, User
+from middleware import get_current_user
 
 router = APIRouter(prefix="/api", tags=["flashcards"])
 
@@ -48,6 +50,8 @@ class CardCreate(BaseModel):
     id: str
     deckId: str
     type: str = "basic"
+    direction: str = "normal"
+    pairId: Optional[str] = None
     front: str
     back: str
     audio: Optional[str] = None
@@ -62,6 +66,8 @@ class CardUpdate(BaseModel):
     audio: Optional[str] = None
     tags: Optional[List[str]] = None
     type: Optional[str] = None
+    direction: Optional[str] = None
+    pairId: Optional[str] = None
     fsrs: Optional[FSRSData] = None
 
 
@@ -99,29 +105,71 @@ class SyncRequest(BaseModel):
     studySessions: List[StudySessionCreate] = []
 
 
+# ============== Helper Functions ==============
+
+def parse_datetime(dt_str: Optional[str]) -> Optional[datetime]:
+    """Parse ISO datetime string"""
+    if not dt_str:
+        return None
+    try:
+        return datetime.fromisoformat(dt_str.replace('Z', '+00:00'))
+    except ValueError:
+        return datetime.now(timezone.utc)
+
+
+def get_user_deck(db: Session, deck_id: str, user_id: str) -> Deck:
+    """Get a deck and verify it belongs to the user"""
+    deck = db.query(Deck).filter(Deck.id == deck_id, Deck.user_id == user_id).first()
+    if not deck:
+        raise HTTPException(status_code=404, detail="Deck not found")
+    return deck
+
+
+def get_user_card(db: Session, card_id: str, user_id: str) -> Card:
+    """Get a card and verify it belongs to the user"""
+    card = db.query(Card).join(Deck).filter(Card.id == card_id, Deck.user_id == user_id).first()
+    if not card:
+        raise HTTPException(status_code=404, detail="Card not found")
+    return card
+
+
 # ============== Deck Endpoints ==============
 
 @router.get("/decks")
-def get_decks(db: Session = Depends(get_db)):
-    """Get all decks"""
-    decks = db.query(Deck).all()
+def get_decks(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get all decks for the current user"""
+    decks = db.query(Deck).filter(Deck.user_id == current_user.id).all()
     return [d.to_dict() for d in decks]
 
 
 @router.get("/decks/{deck_id}")
-def get_deck(deck_id: str, db: Session = Depends(get_db)):
+def get_deck(
+    deck_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Get a specific deck"""
-    deck = db.query(Deck).filter(Deck.id == deck_id).first()
-    if not deck:
-        raise HTTPException(status_code=404, detail="Deck not found")
+    deck = get_user_deck(db, deck_id, current_user.id)
     return deck.to_dict()
 
 
 @router.post("/decks")
-def create_deck(deck: DeckCreate, db: Session = Depends(get_db)):
+def create_deck(
+    deck: DeckCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Create a new deck"""
+    # Verify parent deck belongs to user if specified
+    if deck.parentId:
+        get_user_deck(db, deck.parentId, current_user.id)
+
     db_deck = Deck(
         id=deck.id,
+        user_id=current_user.id,
         name=deck.name,
         description=deck.description,
         parent_id=deck.parentId,
@@ -134,17 +182,23 @@ def create_deck(deck: DeckCreate, db: Session = Depends(get_db)):
 
 
 @router.put("/decks/{deck_id}")
-def update_deck(deck_id: str, deck: DeckUpdate, db: Session = Depends(get_db)):
+def update_deck(
+    deck_id: str,
+    deck: DeckUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Update a deck"""
-    db_deck = db.query(Deck).filter(Deck.id == deck_id).first()
-    if not db_deck:
-        raise HTTPException(status_code=404, detail="Deck not found")
+    db_deck = get_user_deck(db, deck_id, current_user.id)
 
     if deck.name is not None:
         db_deck.name = deck.name
     if deck.description is not None:
         db_deck.description = deck.description
     if deck.parentId is not None:
+        # Verify parent deck belongs to user
+        if deck.parentId:
+            get_user_deck(db, deck.parentId, current_user.id)
         db_deck.parent_id = deck.parentId
     if deck.settings is not None:
         db_deck.settings = deck.settings
@@ -155,12 +209,13 @@ def update_deck(deck_id: str, deck: DeckUpdate, db: Session = Depends(get_db)):
 
 
 @router.delete("/decks/{deck_id}")
-def delete_deck(deck_id: str, db: Session = Depends(get_db)):
+def delete_deck(
+    deck_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Delete a deck and all its cards"""
-    db_deck = db.query(Deck).filter(Deck.id == deck_id).first()
-    if not db_deck:
-        raise HTTPException(status_code=404, detail="Deck not found")
-
+    db_deck = get_user_deck(db, deck_id, current_user.id)
     db.delete(db_deck)
     db.commit()
     return {"status": "ok", "message": "Deck deleted"}
@@ -169,52 +224,67 @@ def delete_deck(deck_id: str, db: Session = Depends(get_db)):
 # ============== Card Endpoints ==============
 
 @router.get("/cards")
-def get_cards(deck_id: Optional[str] = Query(None), db: Session = Depends(get_db)):
-    """Get all cards, optionally filtered by deck"""
-    query = db.query(Card)
+def get_cards(
+    deck_id: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get all cards for the current user, optionally filtered by deck"""
+    query = db.query(Card).join(Deck).filter(Deck.user_id == current_user.id)
     if deck_id:
+        # Verify deck belongs to user
+        get_user_deck(db, deck_id, current_user.id)
+        query = query.filter(Card.deck_id == deck_id)
+    cards = query.all()
+    return [c.to_dict() for c in cards]
+
+
+@router.get("/cards/due")
+def get_due_cards(
+    deck_id: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get cards that are due for review"""
+    now = datetime.now(timezone.utc)
+    query = db.query(Card).join(Deck).filter(
+        Deck.user_id == current_user.id,
+        Card.fsrs_due <= now,
+    )
+    if deck_id:
+        get_user_deck(db, deck_id, current_user.id)
         query = query.filter(Card.deck_id == deck_id)
     cards = query.all()
     return [c.to_dict() for c in cards]
 
 
 @router.get("/cards/{card_id}")
-def get_card(card_id: str, db: Session = Depends(get_db)):
+def get_card(
+    card_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Get a specific card"""
-    card = db.query(Card).filter(Card.id == card_id).first()
-    if not card:
-        raise HTTPException(status_code=404, detail="Card not found")
+    card = get_user_card(db, card_id, current_user.id)
     return card.to_dict()
 
 
-@router.get("/cards/due")
-def get_due_cards(deck_id: Optional[str] = Query(None), db: Session = Depends(get_db)):
-    """Get cards that are due for review"""
-    now = datetime.now(timezone.utc)
-    query = db.query(Card).filter(Card.fsrs_due <= now)
-    if deck_id:
-        query = query.filter(Card.deck_id == deck_id)
-    cards = query.all()
-    return [c.to_dict() for c in cards]
-
-
-def parse_datetime(dt_str: Optional[str]) -> Optional[datetime]:
-    """Parse ISO datetime string"""
-    if not dt_str:
-        return None
-    try:
-        return datetime.fromisoformat(dt_str.replace('Z', '+00:00'))
-    except ValueError:
-        return datetime.now(timezone.utc)
-
-
 @router.post("/cards")
-def create_card(card: CardCreate, db: Session = Depends(get_db)):
+def create_card(
+    card: CardCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Create a new card"""
+    # Verify deck belongs to user
+    get_user_deck(db, card.deckId, current_user.id)
+
     db_card = Card(
         id=card.id,
         deck_id=card.deckId,
         type=card.type,
+        direction=card.direction,
+        pair_id=card.pairId,
         front=card.front,
         back=card.back,
         audio=card.audio,
@@ -237,11 +307,14 @@ def create_card(card: CardCreate, db: Session = Depends(get_db)):
 
 
 @router.put("/cards/{card_id}")
-def update_card(card_id: str, card: CardUpdate, db: Session = Depends(get_db)):
+def update_card(
+    card_id: str,
+    card: CardUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Update a card"""
-    db_card = db.query(Card).filter(Card.id == card_id).first()
-    if not db_card:
-        raise HTTPException(status_code=404, detail="Card not found")
+    db_card = get_user_card(db, card_id, current_user.id)
 
     if card.front is not None:
         db_card.front = card.front
@@ -253,6 +326,10 @@ def update_card(card_id: str, card: CardUpdate, db: Session = Depends(get_db)):
         db_card.tags = card.tags
     if card.type is not None:
         db_card.type = card.type
+    if card.direction is not None:
+        db_card.direction = card.direction
+    if card.pairId is not None:
+        db_card.pair_id = card.pairId
     if card.fsrs is not None:
         db_card.fsrs_due = parse_datetime(card.fsrs.due)
         db_card.fsrs_stability = card.fsrs.stability
@@ -270,12 +347,13 @@ def update_card(card_id: str, card: CardUpdate, db: Session = Depends(get_db)):
 
 
 @router.delete("/cards/{card_id}")
-def delete_card(card_id: str, db: Session = Depends(get_db)):
+def delete_card(
+    card_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Delete a card"""
-    db_card = db.query(Card).filter(Card.id == card_id).first()
-    if not db_card:
-        raise HTTPException(status_code=404, detail="Card not found")
-
+    db_card = get_user_card(db, card_id, current_user.id)
     db.delete(db_card)
     db.commit()
     return {"status": "ok", "message": "Card deleted"}
@@ -284,18 +362,30 @@ def delete_card(card_id: str, db: Session = Depends(get_db)):
 # ============== Review Log Endpoints ==============
 
 @router.get("/review-logs")
-def get_review_logs(card_id: Optional[str] = Query(None), db: Session = Depends(get_db)):
-    """Get review logs, optionally filtered by card"""
-    query = db.query(ReviewLog)
+def get_review_logs(
+    card_id: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get review logs for the current user's cards"""
+    query = db.query(ReviewLog).join(Card).join(Deck).filter(Deck.user_id == current_user.id)
     if card_id:
+        get_user_card(db, card_id, current_user.id)
         query = query.filter(ReviewLog.card_id == card_id)
     logs = query.order_by(ReviewLog.review.desc()).all()
     return [l.to_dict() for l in logs]
 
 
 @router.post("/review-logs")
-def create_review_log(log: ReviewLogCreate, db: Session = Depends(get_db)):
+def create_review_log(
+    log: ReviewLogCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Create a review log entry"""
+    # Verify card belongs to user
+    get_user_card(db, log.cardId, current_user.id)
+
     db_log = ReviewLog(
         id=log.id,
         card_id=log.cardId,
@@ -317,20 +407,33 @@ def create_review_log(log: ReviewLogCreate, db: Session = Depends(get_db)):
 # ============== Study Session Endpoints ==============
 
 @router.get("/study-sessions")
-def get_study_sessions(deck_id: Optional[str] = Query(None), db: Session = Depends(get_db)):
-    """Get study sessions"""
-    query = db.query(StudySession)
+def get_study_sessions(
+    deck_id: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get study sessions for the current user"""
+    query = db.query(StudySession).filter(StudySession.user_id == current_user.id)
     if deck_id:
+        get_user_deck(db, deck_id, current_user.id)
         query = query.filter(StudySession.deck_id == deck_id)
     sessions = query.order_by(StudySession.start_time.desc()).all()
     return [s.to_dict() for s in sessions]
 
 
 @router.post("/study-sessions")
-def create_study_session(session: StudySessionCreate, db: Session = Depends(get_db)):
+def create_study_session(
+    session: StudySessionCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Create a study session"""
+    # Verify deck belongs to user
+    get_user_deck(db, session.deckId, current_user.id)
+
     db_session = StudySession(
         id=session.id,
+        user_id=current_user.id,
         deck_id=session.deckId,
         start_time=parse_datetime(session.startTime),
         end_time=parse_datetime(session.endTime),
@@ -347,9 +450,17 @@ def create_study_session(session: StudySessionCreate, db: Session = Depends(get_
 
 
 @router.put("/study-sessions/{session_id}")
-def update_study_session(session_id: str, session: StudySessionCreate, db: Session = Depends(get_db)):
+def update_study_session(
+    session_id: str,
+    session: StudySessionCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Update a study session"""
-    db_session = db.query(StudySession).filter(StudySession.id == session_id).first()
+    db_session = db.query(StudySession).filter(
+        StudySession.id == session_id,
+        StudySession.user_id == current_user.id,
+    ).first()
     if not db_session:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -368,22 +479,35 @@ def update_study_session(session_id: str, session: StudySessionCreate, db: Sessi
 # ============== Sync Endpoints ==============
 
 @router.post("/sync")
-def sync_all_data(data: SyncRequest, db: Session = Depends(get_db)):
+def sync_all_data(
+    data: SyncRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """
-    Sync all data from frontend to backend.
-    This replaces all existing data with the provided data.
+    Sync all data from frontend to backend for the current user.
+    This replaces all existing data for the user with the provided data.
     """
     try:
-        # Clear existing data
-        db.query(ReviewLog).delete()
-        db.query(StudySession).delete()
-        db.query(Card).delete()
-        db.query(Deck).delete()
+        # Clear existing data for this user only
+        # Delete in order: ReviewLogs -> StudySessions -> Cards -> Decks
+        user_deck_ids = [d.id for d in db.query(Deck.id).filter(Deck.user_id == current_user.id).all()]
+
+        if user_deck_ids:
+            db.query(ReviewLog).filter(
+                ReviewLog.card_id.in_(
+                    db.query(Card.id).filter(Card.deck_id.in_(user_deck_ids))
+                )
+            ).delete(synchronize_session=False)
+            db.query(StudySession).filter(StudySession.user_id == current_user.id).delete()
+            db.query(Card).filter(Card.deck_id.in_(user_deck_ids)).delete(synchronize_session=False)
+            db.query(Deck).filter(Deck.user_id == current_user.id).delete()
 
         # Import decks
         for deck in data.decks:
             db_deck = Deck(
                 id=deck.id,
+                user_id=current_user.id,
                 name=deck.name,
                 description=deck.description,
                 parent_id=deck.parentId,
@@ -399,6 +523,8 @@ def sync_all_data(data: SyncRequest, db: Session = Depends(get_db)):
                 id=card.id,
                 deck_id=card.deckId,
                 type=card.type,
+                direction=getattr(card, 'direction', 'normal'),
+                pair_id=getattr(card, 'pairId', None),
                 front=card.front,
                 back=card.back,
                 audio=card.audio,
@@ -438,6 +564,7 @@ def sync_all_data(data: SyncRequest, db: Session = Depends(get_db)):
         for session in data.studySessions:
             db_session = StudySession(
                 id=session.id,
+                user_id=current_user.id,
                 deck_id=session.deckId,
                 start_time=parse_datetime(session.startTime),
                 end_time=parse_datetime(session.endTime),
@@ -467,12 +594,19 @@ def sync_all_data(data: SyncRequest, db: Session = Depends(get_db)):
 
 
 @router.get("/sync")
-def get_all_data(db: Session = Depends(get_db)):
-    """Get all data for syncing to frontend"""
-    decks = db.query(Deck).all()
-    cards = db.query(Card).all()
-    review_logs = db.query(ReviewLog).all()
-    study_sessions = db.query(StudySession).all()
+def get_all_data(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get all data for the current user for syncing to frontend"""
+    decks = db.query(Deck).filter(Deck.user_id == current_user.id).all()
+    deck_ids = [d.id for d in decks]
+
+    cards = db.query(Card).filter(Card.deck_id.in_(deck_ids)).all() if deck_ids else []
+    card_ids = [c.id for c in cards]
+
+    review_logs = db.query(ReviewLog).filter(ReviewLog.card_id.in_(card_ids)).all() if card_ids else []
+    study_sessions = db.query(StudySession).filter(StudySession.user_id == current_user.id).all()
 
     return {
         "decks": [d.to_dict() for d in decks],
@@ -485,8 +619,15 @@ def get_all_data(db: Session = Depends(get_db)):
 # ============== Stats Endpoints ==============
 
 @router.get("/stats/deck/{deck_id}")
-def get_deck_stats(deck_id: str, db: Session = Depends(get_db)):
+def get_deck_stats(
+    deck_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Get statistics for a deck"""
+    # Verify deck belongs to user
+    get_user_deck(db, deck_id, current_user.id)
+
     now = datetime.now(timezone.utc)
 
     total_cards = db.query(Card).filter(Card.deck_id == deck_id).count()

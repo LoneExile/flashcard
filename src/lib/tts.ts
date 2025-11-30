@@ -6,7 +6,7 @@
  */
 
 // Configuration
-const TTS_SERVER_URL = import.meta.env.VITE_TTS_SERVER_URL || 'http://localhost:8000'
+const TTS_SERVER_URL = import.meta.env.VITE_TTS_SERVER_URL || ''
 const USE_CACHE = true
 const FALLBACK_TO_WEB_SPEECH = true
 

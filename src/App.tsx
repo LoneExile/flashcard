@@ -5,26 +5,44 @@ import {
   Settings as SettingsIcon,
   Plus,
   Sparkles,
+  User,
+  LogOut,
+  Shield,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { DeckList } from '@/components/DeckList'
 import { DeckDialog } from '@/components/DeckDialog'
 import { DeckView } from '@/components/DeckView'
 import { StudyView } from '@/components/StudyView'
 import { Statistics } from '@/components/Statistics'
 import { Settings } from '@/components/Settings'
+import { LoginPage } from '@/pages/LoginPage'
+import { RegisterPage } from '@/pages/RegisterPage'
+import { AdminPage } from '@/pages/AdminPage'
+import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import { db, initializeDB } from '@/db'
 import { useDecks } from '@/hooks/useDecks'
 import { useCards } from '@/hooks/useCards'
+import { useAutoSync } from '@/hooks/useAutoSync'
 import { seedDecks } from '@/lib/seedData'
+import { syncFromServer, checkServerStatus } from '@/lib/api'
 import type { Deck } from '@/types'
 
 type View = 'decks' | 'deck-view' | 'study'
 type Tab = 'decks' | 'stats' | 'settings'
+type AuthView = 'login' | 'register'
 
-function App() {
+function AuthenticatedApp() {
+  const { user, logout } = useAuth()
   const [currentTab, setCurrentTab] = useState<Tab>('decks')
   const [currentView, setCurrentView] = useState<View>('decks')
   const [selectedDeck, setSelectedDeck] = useState<Deck | null>(null)
@@ -32,9 +50,13 @@ function App() {
   const [editingDeck, setEditingDeck] = useState<Deck | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [seeding, setSeeding] = useState(false)
+  const [showAdmin, setShowAdmin] = useState(false)
 
   const { decks, createDeck } = useDecks()
   const { importCards } = useCards()
+
+  // Enable auto sync when user is authenticated
+  useAutoSync()
 
   useEffect(() => {
     const init = async () => {
@@ -49,6 +71,34 @@ function App() {
       } else {
         if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
           document.documentElement.classList.add('dark')
+        }
+      }
+
+      // Check if IndexedDB is empty (first login on this device)
+      // If so, automatically sync from backend
+      const deckCount = await db.decks.count()
+      if (deckCount === 0) {
+        console.log('[Init] No local data found, checking server for data...')
+        const serverOnline = await checkServerStatus()
+        if (serverOnline) {
+          console.log('[Init] Server online, syncing from backend...')
+          const result = await syncFromServer()
+          if (result.success && result.data) {
+            // Import data from server
+            if (result.data.decks.length > 0) {
+              await db.decks.bulkAdd(result.data.decks)
+            }
+            if (result.data.cards.length > 0) {
+              await db.cards.bulkAdd(result.data.cards)
+            }
+            if (result.data.reviewLogs.length > 0) {
+              await db.reviewLogs.bulkAdd(result.data.reviewLogs)
+            }
+            if (result.data.studySessions.length > 0) {
+              await db.studySessions.bulkAdd(result.data.studySessions)
+            }
+            console.log('[Init] Synced from backend:', result.message)
+          }
         }
       }
 
@@ -115,6 +165,10 @@ function App() {
     }
   }
 
+  const handleLogout = async () => {
+    await logout()
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -124,6 +178,10 @@ function App() {
         </div>
       </div>
     )
+  }
+
+  if (showAdmin) {
+    return <AdminPage onBack={() => setShowAdmin(false)} />
   }
 
   return (
@@ -136,17 +194,44 @@ function App() {
               <BookOpen className="h-6 w-6 text-primary" />
               <span className="font-bold text-lg">Flashcard</span>
             </div>
-            {currentView === 'decks' && decks.length === 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleSeedData}
-                disabled={seeding}
-              >
-                <Sparkles className="mr-2 h-4 w-4" />
-                {seeding ? 'Loading...' : 'Load Sample Data'}
-              </Button>
-            )}
+            <div className="flex items-center gap-2">
+              {currentView === 'decks' && decks.length === 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSeedData}
+                  disabled={seeding}
+                >
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  {seeding ? 'Loading...' : 'Load Sample Data'}
+                </Button>
+              )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="gap-2">
+                    <User className="h-4 w-4" />
+                    <span className="hidden sm:inline">{user?.username}</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <div className="px-2 py-1.5 text-sm font-medium">{user?.email}</div>
+                  <DropdownMenuSeparator />
+                  {user?.isAdmin && (
+                    <>
+                      <DropdownMenuItem onClick={() => setShowAdmin(true)}>
+                        <Shield className="mr-2 h-4 w-4" />
+                        Admin Dashboard
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                    </>
+                  )}
+                  <DropdownMenuItem onClick={handleLogout}>
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Sign out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
         </header>
 
@@ -224,6 +309,53 @@ function App() {
         />
       </div>
     </TooltipProvider>
+  )
+}
+
+function AppContent() {
+  const { isLoading, isAuthenticated, authConfig } = useAuth()
+  const [authView, setAuthView] = useState<AuthView>('login')
+
+  // Check for OAuth callback
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('success') === 'true') {
+      // Clear the URL params
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+    if (params.get('error')) {
+      // Handle OAuth error
+      console.error('OAuth error:', params.get('error'))
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [])
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    if (authView === 'register' && authConfig?.registrationEnabled) {
+      return <RegisterPage onSwitchToLogin={() => setAuthView('login')} />
+    }
+    return <LoginPage onSwitchToRegister={() => setAuthView('register')} />
+  }
+
+  return <AuthenticatedApp />
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   )
 }
 
